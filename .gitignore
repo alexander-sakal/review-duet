@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+cli/dist/
+plugin/build/
+plugin/.gradle/
+
+# IDE
+.idea/
+*.iml
+
+# Review data (always gitignored)
+.review/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
