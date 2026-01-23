@@ -1,3 +1,101 @@
 #!/usr/bin/env node
 
-console.log('review CLI - v0.1.0');
+import { ReviewStore } from './store';
+import { listComments } from './commands/list';
+import { replyToComment } from './commands/reply';
+import { markAsFixed } from './commands/fix';
+import { showComment } from './commands/show';
+import { CommentStatus, isValidStatus } from './types';
+
+export interface ParsedArgs {
+  command: string;
+  args: string[];
+  options: Record<string, string>;
+}
+
+export function parseArgs(argv: string[]): ParsedArgs {
+  const command = argv[0] || 'help';
+  const args: string[] = [];
+  const options: Record<string, string> = {};
+
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+
+    if (arg.startsWith('--')) {
+      const [key, value] = arg.slice(2).split('=');
+      if (value !== undefined) {
+        options[key] = value;
+      } else if (argv[i + 1] && !argv[i + 1].startsWith('--')) {
+        options[key] = argv[++i];
+      } else {
+        options[key] = 'true';
+      }
+    } else {
+      args.push(arg);
+    }
+  }
+
+  return { command, args, options };
+}
+
+export function runCli(argv: string[], cwd: string = process.cwd()): string {
+  const { command, args, options } = parseArgs(argv);
+  const store = new ReviewStore(cwd);
+
+  switch (command) {
+    case 'list': {
+      const statusFilter = options.status as CommentStatus | undefined;
+      if (statusFilter && !isValidStatus(statusFilter)) {
+        throw new Error(`Invalid status: ${statusFilter}`);
+      }
+      return listComments(store, { status: statusFilter });
+    }
+
+    case 'reply': {
+      const id = parseInt(args[0], 10);
+      const message = args[1];
+      if (isNaN(id)) throw new Error('Invalid comment ID');
+      if (!message) throw new Error('Message required');
+      replyToComment(store, id, message);
+      return `Replied to comment #${id}`;
+    }
+
+    case 'fix': {
+      const id = parseInt(args[0], 10);
+      const commit = options.commit;
+      if (isNaN(id)) throw new Error('Invalid comment ID');
+      if (!commit) throw new Error('--commit required');
+      markAsFixed(store, id, commit);
+      return `Marked comment #${id} as fixed (${commit})`;
+    }
+
+    case 'show': {
+      const id = parseInt(args[0], 10);
+      if (isNaN(id)) throw new Error('Invalid comment ID');
+      return showComment(store, id);
+    }
+
+    case 'help':
+    default:
+      return `review CLI - Code review helper for Claude Code
+
+Usage:
+  review list [--status=<status>]    List comments
+  review reply <id> "<message>"      Reply to a comment
+  review fix <id> --commit <sha>     Mark as fixed
+  review show <id>                   Show comment details
+
+Statuses: open, pending-user, pending-agent, fixed, resolved, wontfix`;
+  }
+}
+
+// Main entry point
+if (require.main === module) {
+  try {
+    const output = runCli(process.argv.slice(2));
+    console.log(output);
+  } catch (error) {
+    console.error(`Error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+}
