@@ -12,5 +12,8 @@
                     anchor="right"
                     factoryClass="com.codereview.local.ui.ReviewToolWindowFactory"
                     icon="AllIcons.Actions.Annotate"/>
+        <codeInsight.lineMarkerProvider
+            language=""
+            implementationClass="com.codereview.local.gutter.ReviewGutterProvider"/>
     </extensions>
 </idea-plugin>
