@@ -1,20 +1,28 @@
 {
-  "name": "code-review-cli",
+  "name": "@codereview/cli",
   "version": "0.1.0",
   "description": "CLI tool for local code review workflows with Claude Code",
   "main": "dist/index.js",
   "bin": {
     "review": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest",
-    "test:watch": "vitest --watch"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm run test"
   },
-  "keywords": ["code-review", "cli", "claude"],
+  "keywords": ["code-review", "cli", "claude", "ai"],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/code-review-local"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "typescript": "^5.3.0",
