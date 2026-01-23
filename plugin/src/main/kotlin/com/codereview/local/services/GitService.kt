@@ -1,0 +1,54 @@
+package com.codereview.local.services
+
+import java.nio.file.Path
+import java.util.concurrent.TimeUnit
+
+class GitService(private val projectRoot: Path) {
+
+    fun createTag(tagName: String): Boolean {
+        return runGitCommand("tag", tagName) == 0
+    }
+
+    fun tagExists(tagName: String): Boolean {
+        return runGitCommand("rev-parse", "--verify", "refs/tags/$tagName") == 0
+    }
+
+    fun getCurrentCommitSha(): String? {
+        val result = runGitCommandWithOutput("rev-parse", "--short", "HEAD")
+        return result?.trim()
+    }
+
+    fun getFileAtRef(ref: String, filePath: String): String? {
+        return runGitCommandWithOutput("show", "$ref:$filePath")
+    }
+
+    private fun runGitCommand(vararg args: String): Int {
+        return try {
+            val process = ProcessBuilder("git", *args)
+                .directory(projectRoot.toFile())
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor(30, TimeUnit.SECONDS)
+            process.exitValue()
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
+    private fun runGitCommandWithOutput(vararg args: String): String? {
+        return try {
+            val process = ProcessBuilder("git", *args)
+                .directory(projectRoot.toFile())
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor(30, TimeUnit.SECONDS)
+            if (process.exitValue() == 0) {
+                process.inputStream.bufferedReader().readText()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
