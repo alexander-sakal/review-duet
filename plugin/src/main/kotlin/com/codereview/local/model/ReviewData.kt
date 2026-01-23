@@ -1,0 +1,56 @@
+package com.codereview.local.model
+
+enum class CommentStatus(val jsonValue: String) {
+    OPEN("open"),
+    PENDING_USER("pending-user"),
+    PENDING_AGENT("pending-agent"),
+    FIXED("fixed"),
+    RESOLVED("resolved"),
+    WONTFIX("wontfix");
+
+    companion object {
+        fun fromString(value: String): CommentStatus {
+            return entries.find { it.jsonValue == value }
+                ?: throw IllegalArgumentException("Unknown status: $value")
+        }
+    }
+}
+
+data class ThreadEntry(
+    val author: String,
+    val text: String,
+    val at: String
+) {
+    val isUserComment: Boolean get() = author == "user"
+    val isAgentComment: Boolean get() = author == "agent"
+}
+
+data class Comment(
+    val id: Int,
+    val file: String,
+    val line: Int,
+    val ref: String,
+    var status: CommentStatus,
+    var resolveCommit: String?,
+    val thread: MutableList<ThreadEntry>
+) {
+    val firstUserMessage: String?
+        get() = thread.firstOrNull { it.isUserComment }?.text
+
+    val lastAgentMessage: String?
+        get() = thread.lastOrNull { it.isAgentComment }?.text
+}
+
+data class ReviewData(
+    val version: Int,
+    var currentRound: String,
+    val baseRef: String,
+    val comments: MutableList<Comment>
+) {
+    fun getComment(id: Int): Comment? = comments.find { it.id == id }
+
+    fun getNextCommentId(): Int = (comments.maxOfOrNull { it.id } ?: 0) + 1
+
+    fun getCommentsByStatus(status: CommentStatus): List<Comment> =
+        comments.filter { it.status == status }
+}
