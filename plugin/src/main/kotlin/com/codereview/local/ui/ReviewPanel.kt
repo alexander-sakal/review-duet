@@ -1,6 +1,7 @@
 package com.codereview.local.ui
 
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
@@ -16,10 +17,12 @@ import javax.swing.SwingConstants
 
 class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLayout()) {
 
-    private val reviewService: ReviewService by lazy {
-        val basePath = project.basePath ?: throw IllegalStateException("No project base path")
-        ReviewService(Path.of(basePath))
+    private val basePath: Path by lazy {
+        Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
     }
+
+    private val reviewService: ReviewService by lazy { ReviewService(basePath) }
+    private val gitService: GitService by lazy { GitService(basePath) }
 
     init {
         border = JBUI.Borders.empty(10)
@@ -87,8 +90,10 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
         }
 
-        // Placeholder for comment list (will be added in Task 16)
-        val placeholderLabel = JBLabel("Comments list coming soon...")
+        // Comment list
+        val commentList = CommentListPanel(data.comments) { comment ->
+            showCommentDetails(comment)
+        }
 
         // Action buttons
         val buttonPanel = JBPanel<JBPanel<*>>().apply {
@@ -102,21 +107,78 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         }
 
         add(headerPanel, BorderLayout.NORTH)
-        add(placeholderLabel, BorderLayout.CENTER)
+        add(commentList, BorderLayout.CENTER)
         add(buttonPanel, BorderLayout.SOUTH)
     }
 
+    private fun showCommentDetails(comment: com.codereview.local.model.Comment) {
+        // TODO: Will show popup in Task 17
+        println("Selected comment #${comment.id}")
+    }
+
     private fun startFeatureDevelopment() {
-        // Simple initialization without git for now (git integration in Task 20)
-        reviewService.initializeReview("review-r0")
+        // Check if we have a clean git state
+        val currentSha = gitService.getCurrentCommitSha()
+        if (currentSha == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
+                project,
+                "Could not get current commit. Make sure you have at least one commit in the repository.",
+                "Git Error"
+            )
+            return
+        }
+
+        // Create baseline tag
+        val tagName = "review-r0"
+        if (gitService.tagExists(tagName)) {
+            val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
+                project,
+                "Tag '$tagName' already exists. Delete and recreate?",
+                "Tag Exists",
+                com.intellij.openapi.ui.Messages.getQuestionIcon()
+            )
+            if (result != com.intellij.openapi.ui.Messages.YES) return
+            // Note: For MVP, we'll skip the delete step
+        }
+
+        if (!gitService.createTag(tagName)) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(project, "Failed to create git tag", "Git Error")
+            return
+        }
+
+        // Initialize review
+        reviewService.initializeReview(tagName)
         refresh()
+
+        com.intellij.openapi.ui.Messages.showInfoMessage(
+            project,
+            "Feature development started!\n\nBaseline tag '$tagName' created at commit $currentSha",
+            "Review Initialized"
+        )
     }
 
     private fun startNewRound() {
         val data = reviewService.loadReviewData() ?: return
+
+        // Calculate next round number
         val currentNum = data.currentRound.substringAfter("review-r").toIntOrNull() ?: 0
         val newRound = "review-r${currentNum + 1}"
+
+        // Create new tag
+        if (!gitService.createTag(newRound)) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(project, "Failed to create git tag '$newRound'", "Git Error")
+            return
+        }
+
+        // Update review data
         reviewService.startNewRound(newRound)
         refresh()
+
+        val sha = gitService.getCurrentCommitSha() ?: "unknown"
+        com.intellij.openapi.ui.Messages.showInfoMessage(
+            project,
+            "New review round started!\n\nTag '$newRound' created at commit $sha",
+            "New Round"
+        )
     }
 }
