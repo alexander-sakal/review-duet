@@ -16,4 +16,9 @@
             language=""
             implementationClass="com.codereview.local.gutter.ReviewGutterProvider"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="com.codereview.local.listeners.ReviewFileWatcher"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
 </idea-plugin>
