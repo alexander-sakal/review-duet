@@ -112,8 +112,18 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     }
 
     private fun showCommentDetails(comment: com.codereview.local.model.Comment) {
-        // TODO: Will show popup in Task 17
-        println("Selected comment #${comment.id}")
+        val popup = CommentPopup(
+            comment = comment,
+            onReply = { text ->
+                reviewService.addReply(comment.id, text)
+                refresh()
+            },
+            onStatusChange = { status ->
+                reviewService.updateCommentStatus(comment.id, status)
+                refresh()
+            }
+        )
+        popup.show()
     }
 
     private fun startFeatureDevelopment() {
