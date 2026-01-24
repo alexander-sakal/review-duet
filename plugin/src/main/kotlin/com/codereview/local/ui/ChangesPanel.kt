@@ -4,8 +4,15 @@ import com.codereview.local.model.ChangeType
 import com.codereview.local.model.ChangedFile
 import com.codereview.local.services.GitService
 import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManager
+import com.intellij.diff.chains.DiffRequestChain
+import com.intellij.diff.chains.DiffRequestProducer
+import com.intellij.diff.requests.DiffRequest
 import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.util.UserDataHolder
+import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -31,6 +38,7 @@ class ChangesPanel(
     private val rootNode = DefaultMutableTreeNode("Changes")
     private val treeModel = DefaultTreeModel(rootNode)
     private val fileTree = Tree(treeModel)
+    private var currentChanges: List<ChangedFile> = emptyList()
 
     init {
         border = JBUI.Borders.empty(5)
@@ -43,6 +51,16 @@ class ChangesPanel(
             add(Box.createHorizontalStrut(10))
             add(JLabel("To: "))
             add(toCombo)
+            add(Box.createHorizontalGlue())
+        }
+
+        // Footer with Review All button
+        val footerPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            add(JButton("Review All Files").apply {
+                icon = AllIcons.Actions.Diff
+                addActionListener { openAllDiffs() }
+            })
             add(Box.createHorizontalGlue())
         }
 
@@ -60,13 +78,14 @@ class ChangesPanel(
                     val path = fileTree.getPathForLocation(e.x, e.y) ?: return
                     val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
                     val file = node.userObject as? ChangedFile ?: return
-                    openDiff(file)
+                    openDiffAtFile(file)
                 }
             }
         })
 
         add(headerPanel, BorderLayout.NORTH)
         add(JBScrollPane(fileTree), BorderLayout.CENTER)
+        add(footerPanel, BorderLayout.SOUTH)
 
         refreshTags()
     }
@@ -113,12 +132,13 @@ class ChangesPanel(
         rootNode.removeAllChildren()
 
         if (fromRef == toRef) {
+            currentChanges = emptyList()
             treeModel.reload()
             return
         }
 
-        val changes = gitService.getChangedFiles(fromRef, toRef)
-        buildTree(changes)
+        currentChanges = gitService.getChangedFiles(fromRef, toRef)
+        buildTree(currentChanges)
         treeModel.reload()
         expandAllNodes()
     }
@@ -181,30 +201,60 @@ class ChangesPanel(
         }
     }
 
-    private fun openDiff(file: ChangedFile) {
-        val fromRef = fromCombo.selectedItem as? String ?: return
-        val toRef = toCombo.selectedItem as? String ?: return
+    private fun openDiffAtFile(file: ChangedFile) {
+        if (currentChanges.isEmpty()) return
 
-        val fromContent = when (file.changeType) {
-            ChangeType.ADDED -> ""
-            else -> gitService.getFileAtRef(fromRef, file.path) ?: ""
+        val startIndex = currentChanges.indexOf(file).coerceAtLeast(0)
+        val chain = createDiffChain(startIndex)
+
+        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+    }
+
+    private fun openAllDiffs() {
+        if (currentChanges.isEmpty()) return
+
+        val chain = createDiffChain(0)
+        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+    }
+
+    private fun createDiffChain(startIndex: Int): DiffRequestChain {
+        val fromRef = fromCombo.selectedItem as? String ?: ""
+        val toRef = toCombo.selectedItem as? String ?: ""
+
+        val producers = currentChanges.map { file ->
+            object : DiffRequestProducer {
+                override fun getName(): String = file.path
+
+                override fun process(context: UserDataHolder, indicator: ProgressIndicator): DiffRequest {
+                    val fromContent = when (file.changeType) {
+                        ChangeType.ADDED -> ""
+                        else -> gitService.getFileAtRef(fromRef, file.path) ?: ""
+                    }
+
+                    val toContent = when (file.changeType) {
+                        ChangeType.DELETED -> ""
+                        else -> gitService.getFileAtRef(toRef, file.path) ?: ""
+                    }
+
+                    val contentFactory = DiffContentFactory.getInstance()
+                    return SimpleDiffRequest(
+                        "${file.path} ($fromRef → $toRef)",
+                        contentFactory.create(fromContent),
+                        contentFactory.create(toContent),
+                        fromRef,
+                        toRef
+                    )
+                }
+            }
         }
 
-        val toContent = when (file.changeType) {
-            ChangeType.DELETED -> ""
-            else -> gitService.getFileAtRef(toRef, file.path) ?: ""
+        return object : UserDataHolderBase(), DiffRequestChain {
+            private var currentIndex = startIndex
+
+            override fun getRequests(): List<DiffRequestProducer> = producers
+            override fun getIndex(): Int = currentIndex
+            override fun setIndex(index: Int) { currentIndex = index }
         }
-
-        val contentFactory = DiffContentFactory.getInstance()
-        val request = SimpleDiffRequest(
-            "${file.path} ($fromRef → $toRef)",
-            contentFactory.create(fromContent),
-            contentFactory.create(toContent),
-            fromRef,
-            toRef
-        )
-
-        DiffManager.getInstance().showDiff(project, request)
     }
 
     private class ChangedFileTreeRenderer : ColoredTreeCellRenderer() {
