@@ -14,6 +14,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.util.UserDataHolder
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.JBColor
@@ -236,11 +237,15 @@ class ChangesPanel(
                         else -> gitService.getFileAtRef(toRef, file.path) ?: ""
                     }
 
+                    // Get file type for syntax highlighting
+                    val fileName = file.path.substringAfterLast('/')
+                    val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
                     val contentFactory = DiffContentFactory.getInstance()
                     return SimpleDiffRequest(
                         "${file.path} ($fromRef → $toRef)",
-                        contentFactory.create(fromContent),
-                        contentFactory.create(toContent),
+                        contentFactory.create(project, fromContent, fileType),
+                        contentFactory.create(project, toContent, fileType),
                         fromRef,
                         toRef
                     )
