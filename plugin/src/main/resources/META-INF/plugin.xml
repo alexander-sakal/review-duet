@@ -31,5 +31,12 @@
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift C"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+        <action id="CodeReview.GoToSource"
+                class="com.codereview.local.actions.GoToSourceAction"
+                text="Go to Source"
+                description="Open the source file at current line">
+            <keyboard-shortcut keymap="$default" first-keystroke="F4"/>
+            <add-to-group group-id="Diff.EditorPopupMenu" anchor="first"/>
+        </action>
     </actions>
 </idea-plugin>
