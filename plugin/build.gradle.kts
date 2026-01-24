@@ -17,7 +17,7 @@ dependencies {
 }
 
 intellij {
-    version.set("2023.3")
+    version.set("2025.1")
     type.set("PS")  // PhpStorm instead of IntelliJ Community
     plugins.set(listOf("Git4Idea"))
 }
@@ -33,8 +33,8 @@ tasks {
     }
 
     patchPluginXml {
-        sinceBuild.set("233")
-        untilBuild.set("243.*")
+        sinceBuild.set("251")
+        untilBuild.set("253.*")
     }
 
     test {
