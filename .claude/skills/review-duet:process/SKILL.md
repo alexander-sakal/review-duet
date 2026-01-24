@@ -1,5 +1,5 @@
 ---
-name: review:process
+name: review-duet:process
 description: "Process all open review comments autonomously. Spawns an agent that reads comments, fixes issues (best guess if unclear), and marks them as fixed."
 ---
 
@@ -25,18 +25,18 @@ Task tool:
 
     ## Your Tools
 
-    The review CLI is available. Commands:
-    - `review list` - List all comments (add `--status=open` to filter)
-    - `review show <id>` - Show full comment details with thread
-    - `review reply <id> "<message>"` - Reply to a comment
-    - `review fix <id> --commit <sha>` - Mark comment as fixed with commit reference
+    The review-duet CLI is available. Commands:
+    - `review-duet list` - List all comments (add `--status=open` to filter)
+    - `review-duet show <id>` - Show full comment details with thread
+    - `review-duet reply <id> "<message>"` - Reply to a comment
+    - `review-duet fix <id> --commit <sha>` - Mark comment as fixed with commit reference
 
     ## Your Process
 
-    1. Run `review list --status=open,pending-agent` to get actionable comments
+    1. Run `review-duet list --status=open,pending-agent` to get actionable comments
 
     2. For each comment:
-       a. Run `review show <id>` to see full context
+       a. Run `review-duet show <id>` to see full context
        b. Read the file mentioned in the comment
        c. Understand what's being asked
        d. Make the fix:
@@ -44,9 +44,9 @@ Task tool:
           - If unclear: make your best guess
        e. Commit the fix with a descriptive message
        f. If you made assumptions, reply noting them:
-          `review reply <id> "Fixed. Note: I assumed X because Y."`
+          `review-duet reply <id> "Fixed. Note: I assumed X because Y."`
        g. Mark as fixed:
-          `review fix <id> --commit <sha>`
+          `review-duet fix <id> --commit <sha>`
 
     3. Group related fixes into logical commits when possible
 

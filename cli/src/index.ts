@@ -77,13 +77,13 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
 
     case 'help':
     default:
-      return `review CLI - Code review helper for Claude Code
+      return `review-duet CLI - Code review helper for Claude Code
 
 Usage:
-  review list [--status=<status>]    List comments
-  review reply <id> "<message>"      Reply to a comment
-  review fix <id> --commit <sha>     Mark as fixed
-  review show <id>                   Show comment details
+  review-duet list [--status=<status>]    List comments
+  review-duet reply <id> "<message>"      Reply to a comment
+  review-duet fix <id> --commit <sha>     Mark as fixed
+  review-duet show <id>                   Show comment details
 
 Statuses: open, pending-user, pending-agent, fixed, resolved, wontfix`;
   }
