@@ -54,3 +54,23 @@ data class ReviewData(
     fun getCommentsByStatus(status: CommentStatus): List<Comment> =
         comments.filter { it.status == status }
 }
+
+enum class ChangeType(val symbol: String) {
+    ADDED("A"),
+    MODIFIED("M"),
+    DELETED("D");
+
+    companion object {
+        fun fromGitStatus(status: String): ChangeType = when (status) {
+            "A" -> ADDED
+            "M" -> MODIFIED
+            "D" -> DELETED
+            else -> MODIFIED
+        }
+    }
+}
+
+data class ChangedFile(
+    val path: String,
+    val changeType: ChangeType
+)
