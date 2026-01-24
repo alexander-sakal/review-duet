@@ -13,6 +13,7 @@ import java.awt.GridBagLayout
 import java.nio.file.Path
 import javax.swing.BoxLayout
 import javax.swing.JButton
+import com.intellij.ui.components.JBTabbedPane
 import javax.swing.SwingConstants
 
 class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLayout()) {
@@ -23,6 +24,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private val reviewService: ReviewService by lazy { ReviewService(basePath) }
     private val gitService: GitService by lazy { GitService(basePath) }
+    private val changesPanel: ChangesPanel by lazy { ChangesPanel(project, gitService) }
 
     init {
         border = JBUI.Borders.empty(10)
@@ -33,6 +35,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         removeAll()
 
         if (reviewService.hasActiveReview()) {
+            changesPanel.refresh()
             showActiveReviewPanel()
         } else {
             showNoReviewPanel()
@@ -90,9 +93,18 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
         }
 
-        // Comment list
-        val commentList = CommentListPanel(data.comments) { comment ->
-            showCommentDetails(comment)
+        // Comment list panel
+        val commentsContent = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            val commentList = CommentListPanel(data.comments) { comment ->
+                showCommentDetails(comment)
+            }
+            add(commentList, BorderLayout.CENTER)
+        }
+
+        // Tabbed pane
+        val tabbedPane = JBTabbedPane().apply {
+            addTab("Comments", commentsContent)
+            addTab("Changes", changesPanel)
         }
 
         // Action buttons
@@ -107,7 +119,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         }
 
         add(headerPanel, BorderLayout.NORTH)
-        add(commentList, BorderLayout.CENTER)
+        add(tabbedPane, BorderLayout.CENTER)
         add(buttonPanel, BorderLayout.SOUTH)
     }
 
