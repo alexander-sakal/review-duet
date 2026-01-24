@@ -15,6 +15,7 @@
         <codeInsight.lineMarkerProvider
             language=""
             implementationClass="com.codereview.local.gutter.ReviewGutterProvider"/>
+        <diff.DiffExtension implementation="com.codereview.local.diff.DiffCommentExtension"/>
     </extensions>
 
     <projectListeners>
