@@ -1,6 +1,5 @@
 package com.codereview.local.diff
 
-import com.codereview.local.actions.AddCommentDialog
 import com.codereview.local.services.ReviewService
 import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
@@ -18,9 +17,18 @@ import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.RangeHighlighter
-import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.JBPopup
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.awt.RelativePoint
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.components.JBTextArea
+import com.intellij.util.ui.JBUI
+import java.awt.BorderLayout
+import java.awt.Dimension
+import java.awt.Point
 import java.nio.file.Path
-import javax.swing.Icon
+import javax.swing.*
 
 class DiffCommentExtension : DiffExtension() {
 
@@ -40,7 +48,7 @@ class DiffCommentExtension : DiffExtension() {
         setupGutterComments(editor, filePath, basePath, project)
     }
 
-    private fun setupGutterComments(editor: Editor, filePath: String, basePath: String, project: com.intellij.openapi.project.Project) {
+    private fun setupGutterComments(editor: Editor, filePath: String, basePath: String, project: Project) {
         var currentHighlighter: RangeHighlighter? = null
         var currentLine: Int = -1
 
@@ -71,7 +79,7 @@ class DiffCommentExtension : DiffExtension() {
                         null,
                         HighlighterTargetArea.LINES_IN_RANGE
                     ).apply {
-                        gutterIconRenderer = AddCommentGutterIcon(project, filePath, line + 1, basePath)
+                        gutterIconRenderer = AddCommentGutterIcon(editor, project, filePath, line + 1, basePath)
                     }
                 }
             }
@@ -90,7 +98,8 @@ class DiffCommentExtension : DiffExtension() {
     }
 
     private class AddCommentGutterIcon(
-        private val project: com.intellij.openapi.project.Project,
+        private val editor: Editor,
+        private val project: Project,
         private val filePath: String,
         private val line: Int,
         private val basePath: String
@@ -102,30 +111,89 @@ class DiffCommentExtension : DiffExtension() {
 
         override fun getClickAction(): AnAction = object : AnAction() {
             override fun actionPerformed(e: AnActionEvent) {
-                val reviewService = ReviewService(Path.of(basePath))
+                showInlineCommentPopup()
+            }
+        }
 
-                if (!reviewService.hasActiveReview()) {
-                    Messages.showWarningDialog(
-                        project,
-                        "No active review. Start feature development first from the Code Review panel.",
-                        "No Active Review"
-                    )
-                    return
-                }
+        private fun showInlineCommentPopup() {
+            val reviewService = ReviewService(Path.of(basePath))
 
-                val dialog = AddCommentDialog(project, filePath, line)
-                if (dialog.showAndGet()) {
-                    val commentText = dialog.getCommentText()
-                    if (commentText.isNotBlank()) {
-                        reviewService.addComment(filePath, line, commentText)
-                        Messages.showInfoMessage(
-                            project,
-                            "Comment added to $filePath:$line",
-                            "Comment Added"
-                        )
+            if (!reviewService.hasActiveReview()) {
+                JBPopupFactory.getInstance()
+                    .createMessage("No active review. Start feature development first.")
+                    .showInBestPositionFor(editor)
+                return
+            }
+
+            // Create the comment input panel
+            val panel = JPanel(BorderLayout()).apply {
+                border = JBUI.Borders.empty(8)
+                preferredSize = Dimension(400, 120)
+            }
+
+            val headerLabel = JLabel("$filePath:$line").apply {
+                border = JBUI.Borders.emptyBottom(5)
+                foreground = JBUI.CurrentTheme.Label.disabledForeground()
+            }
+
+            val textArea = JBTextArea().apply {
+                rows = 3
+                lineWrap = true
+                wrapStyleWord = true
+                border = JBUI.Borders.empty(5)
+            }
+
+            val scrollPane = JBScrollPane(textArea).apply {
+                preferredSize = Dimension(380, 60)
+            }
+
+            val buttonPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.X_AXIS)
+                border = JBUI.Borders.emptyTop(8)
+            }
+
+            var popup: JBPopup? = null
+
+            val cancelButton = JButton("Cancel").apply {
+                addActionListener { popup?.cancel() }
+            }
+
+            val submitButton = JButton("Add Comment").apply {
+                addActionListener {
+                    val text = textArea.text.trim()
+                    if (text.isNotBlank()) {
+                        reviewService.addComment(filePath, line, text)
+                        popup?.cancel()
                     }
                 }
             }
+
+            buttonPanel.add(Box.createHorizontalGlue())
+            buttonPanel.add(cancelButton)
+            buttonPanel.add(Box.createHorizontalStrut(8))
+            buttonPanel.add(submitButton)
+
+            panel.add(headerLabel, BorderLayout.NORTH)
+            panel.add(scrollPane, BorderLayout.CENTER)
+            panel.add(buttonPanel, BorderLayout.SOUTH)
+
+            // Create and show popup below the line
+            popup = JBPopupFactory.getInstance()
+                .createComponentPopupBuilder(panel, textArea)
+                .setRequestFocus(true)
+                .setFocusable(true)
+                .setMovable(true)
+                .setResizable(true)
+                .setCancelOnClickOutside(true)
+                .setCancelOnOtherWindowOpen(true)
+                .createPopup()
+
+            // Position below the current line
+            val point = editor.visualPositionToXY(editor.offsetToVisualPosition(
+                editor.document.getLineEndOffset(line - 1)
+            ))
+            val editorComponent = editor.contentComponent
+            popup.show(RelativePoint(editorComponent, Point(point.x, point.y + editor.lineHeight)))
         }
 
         override fun equals(other: Any?): Boolean {
