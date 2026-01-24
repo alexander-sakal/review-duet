@@ -241,15 +241,34 @@ class DiffCommentExtension : DiffExtension() {
                 }
                 .createPopup()
 
-            // Function to calculate popup position
-            fun calculatePopupPosition(): Point {
+            val popupHeight = 120 // Approximate popup height
+
+            // Function to calculate popup position, constrained to visible area
+            fun calculatePopupPosition(): Point? {
                 val visualPosition = editor.offsetToVisualPosition(lineEndOffset)
                 val point = editor.visualPositionToXY(visualPosition)
                 val visibleArea = editor.scrollingModel.visibleArea
 
-                // Align to left edge of visible editor area
-                val xPos = visibleArea.x + 20
-                val yPos = point.y + editor.lineHeight
+                val lineY = point.y
+                val lineBottom = lineY + editor.lineHeight
+
+                // Check if line is visible
+                if (lineBottom < visibleArea.y || lineY > visibleArea.y + visibleArea.height) {
+                    return null // Line is not visible
+                }
+
+                // Calculate Y position - prefer below the line, but flip above if no space
+                val yPos = if (lineBottom + popupHeight <= visibleArea.y + visibleArea.height) {
+                    lineBottom // Show below line
+                } else if (lineY - popupHeight >= visibleArea.y) {
+                    lineY - popupHeight // Show above line
+                } else {
+                    // Not enough space either way, show at bottom of visible area
+                    visibleArea.y + visibleArea.height - popupHeight
+                }
+
+                // Constrain X to visible area
+                val xPos = (visibleArea.x + 20).coerceIn(visibleArea.x, visibleArea.x + visibleArea.width - 520)
 
                 return Point(xPos, yPos)
             }
@@ -259,16 +278,18 @@ class DiffCommentExtension : DiffExtension() {
                 popup?.let { p ->
                     if (p.isVisible) {
                         val newPos = calculatePopupPosition()
-                        val editorComponent = editor.contentComponent
-                        val screenPoint = RelativePoint(editorComponent, newPos).screenPoint
-                        p.setLocation(screenPoint)
+                        if (newPos != null) {
+                            val editorComponent = editor.contentComponent
+                            val screenPoint = RelativePoint(editorComponent, newPos).screenPoint
+                            p.setLocation(screenPoint)
+                        }
                     }
                 }
             }
             editor.scrollingModel.addVisibleAreaListener(scrollListener!!)
 
             // Initial position
-            val initialPos = calculatePopupPosition()
+            val initialPos = calculatePopupPosition() ?: Point(20, editor.lineHeight)
             val editorComponent = editor.contentComponent
             popup.show(RelativePoint(editorComponent, initialPos))
 
