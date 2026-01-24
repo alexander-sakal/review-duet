@@ -18,7 +18,7 @@ dependencies {
 
 intellij {
     version.set("2023.3")
-    type.set("IC")
+    type.set("PS")  // PhpStorm instead of IntelliJ Community
     plugins.set(listOf("Git4Idea"))
 }
 

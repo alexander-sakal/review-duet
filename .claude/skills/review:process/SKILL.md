@@ -1,5 +1,5 @@
 ---
-name: process-review
+name: review:process
 description: "Process all open review comments autonomously. Spawns an agent that reads comments, fixes issues (best guess if unclear), and marks them as fixed."
 ---
 

@@ -21,4 +21,14 @@
         <listener class="com.codereview.local.listeners.ReviewFileWatcher"
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
     </projectListeners>
+
+    <actions>
+        <action id="CodeReview.AddComment"
+                class="com.codereview.local.actions.AddCommentAction"
+                text="Add Review Comment"
+                description="Add a review comment at current line">
+            <keyboard-shortcut keymap="$default" first-keystroke="alt shift C"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>
