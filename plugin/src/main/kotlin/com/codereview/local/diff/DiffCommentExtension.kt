@@ -10,9 +10,13 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.colors.EditorColors
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.event.EditorMouseEvent
 import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.editor.event.EditorMouseMotionListener
+import com.intellij.openapi.editor.event.VisibleAreaEvent
+import com.intellij.openapi.editor.event.VisibleAreaListener
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
@@ -21,13 +25,11 @@ import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
-import java.awt.Color
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Point
@@ -129,17 +131,19 @@ class DiffCommentExtension : DiffExtension() {
                 return
             }
 
-            // Add line highlight
+            // Get theme colors
+            val colorsScheme = EditorColorsManager.getInstance().globalScheme
+            val bgColor = colorsScheme.defaultBackground
+            val fgColor = colorsScheme.defaultForeground
+            val selectionColor = colorsScheme.getColor(EditorColors.SELECTION_BACKGROUND_COLOR)
+                ?: colorsScheme.defaultBackground
+
+            // Add line highlight using theme selection color
             val lineStartOffset = editor.document.getLineStartOffset(line - 1)
             val lineEndOffset = editor.document.getLineEndOffset(line - 1)
 
-            val highlightColor = JBColor(
-                Color(255, 255, 200, 100),  // Light yellow for light theme
-                Color(80, 80, 50, 100)       // Dark yellow for dark theme
-            )
-
             val textAttributes = TextAttributes().apply {
-                backgroundColor = highlightColor
+                backgroundColor = selectionColor
             }
 
             val lineHighlighter = editor.markupModel.addRangeHighlighter(
@@ -150,16 +154,14 @@ class DiffCommentExtension : DiffExtension() {
                 HighlighterTargetArea.LINES_IN_RANGE
             )
 
-            // Create inline comment panel (full width, no border frame)
-            val commentBgColor = JBColor(
-                Color(252, 252, 220),  // Light cream for light theme
-                Color(60, 60, 45)      // Dark cream for dark theme
-            )
+            // Create inline comment panel using theme colors
+            val panelBgColor = colorsScheme.getColor(EditorColors.GUTTER_BACKGROUND)
+                ?: bgColor
 
             val panel = JPanel(BorderLayout()).apply {
-                background = commentBgColor
+                background = panelBgColor
                 border = JBUI.Borders.compound(
-                    JBUI.Borders.customLine(JBColor.border(), 1, 0, 1, 0),
+                    JBUI.Borders.customLine(colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: fgColor, 1, 0, 1, 0),
                     JBUI.Borders.empty(8, 12)
                 )
             }
@@ -168,9 +170,11 @@ class DiffCommentExtension : DiffExtension() {
                 rows = 2
                 lineWrap = true
                 wrapStyleWord = true
-                background = JBColor(Color.WHITE, Color(45, 45, 45))
+                background = bgColor
+                foreground = fgColor
+                caretColor = fgColor
                 border = JBUI.Borders.compound(
-                    JBUI.Borders.customLine(JBColor.border(), 1),
+                    JBUI.Borders.customLine(colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: fgColor, 1),
                     JBUI.Borders.empty(6)
                 )
                 putClientProperty("JTextField.placeholderText", "Add a comment...")
@@ -182,15 +186,21 @@ class DiffCommentExtension : DiffExtension() {
             }
 
             val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
-                background = commentBgColor
+                background = panelBgColor
                 border = JBUI.Borders.emptyTop(8)
             }
 
             var popup: JBPopup? = null
+            var scrollListener: VisibleAreaListener? = null
+
+            val cleanup = {
+                editor.markupModel.removeHighlighter(lineHighlighter)
+                scrollListener?.let { editor.scrollingModel.removeVisibleAreaListener(it) }
+            }
 
             val cancelButton = JButton("Cancel").apply {
                 addActionListener {
-                    editor.markupModel.removeHighlighter(lineHighlighter)
+                    cleanup()
                     popup?.cancel()
                 }
             }
@@ -201,7 +211,7 @@ class DiffCommentExtension : DiffExtension() {
                     if (text.isNotBlank()) {
                         reviewService.addComment(filePath, line, text)
                     }
-                    editor.markupModel.removeHighlighter(lineHighlighter)
+                    cleanup()
                     popup?.cancel()
                 }
             }
@@ -226,22 +236,41 @@ class DiffCommentExtension : DiffExtension() {
                 .setCancelOnOtherWindowOpen(false)
                 .setCancelKeyEnabled(true)
                 .setCancelCallback {
-                    editor.markupModel.removeHighlighter(lineHighlighter)
+                    cleanup()
                     true
                 }
                 .createPopup()
 
-            // Position directly below the line, aligned with editor content
-            val visualPosition = editor.offsetToVisualPosition(lineEndOffset)
-            val point = editor.visualPositionToXY(visualPosition)
-            val scrollPane2 = editor.scrollingModel.visibleArea
+            // Function to calculate popup position
+            fun calculatePopupPosition(): Point {
+                val visualPosition = editor.offsetToVisualPosition(lineEndOffset)
+                val point = editor.visualPositionToXY(visualPosition)
+                val visibleArea = editor.scrollingModel.visibleArea
 
-            // Align to left edge of visible editor area
-            val xPos = scrollPane2.x + 20
-            val yPos = point.y + editor.lineHeight
+                // Align to left edge of visible editor area
+                val xPos = visibleArea.x + 20
+                val yPos = point.y + editor.lineHeight
 
+                return Point(xPos, yPos)
+            }
+
+            // Add scroll listener to reposition popup
+            scrollListener = VisibleAreaListener { _: VisibleAreaEvent ->
+                popup?.let { p ->
+                    if (p.isVisible) {
+                        val newPos = calculatePopupPosition()
+                        val editorComponent = editor.contentComponent
+                        val screenPoint = RelativePoint(editorComponent, newPos).screenPoint
+                        p.setLocation(screenPoint)
+                    }
+                }
+            }
+            editor.scrollingModel.addVisibleAreaListener(scrollListener!!)
+
+            // Initial position
+            val initialPos = calculatePopupPosition()
             val editorComponent = editor.contentComponent
-            popup.show(RelativePoint(editorComponent, Point(xPos, yPos)))
+            popup.show(RelativePoint(editorComponent, initialPos))
 
             // Focus the text area
             SwingUtilities.invokeLater {
