@@ -93,4 +93,26 @@ class GitServiceTest {
 
         assertEquals(listOf("review-r0", "review-r1"), tags)
     }
+
+    @Test
+    fun `should get changed files between refs`() {
+        // Initial commit
+        tempDir.resolve("existing.txt").toFile().writeText("original")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "c1").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "tag", "review-r0").directory(tempDir.toFile()).start().waitFor()
+
+        // Make changes
+        tempDir.resolve("existing.txt").toFile().writeText("modified")
+        tempDir.resolve("new.txt").toFile().writeText("new file")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "c2").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "tag", "review-r1").directory(tempDir.toFile()).start().waitFor()
+
+        val changes = gitService.getChangedFiles("review-r0", "review-r1")
+
+        assertEquals(2, changes.size)
+        assertTrue(changes.any { it.path == "existing.txt" && it.changeType == com.codereview.local.model.ChangeType.MODIFIED })
+        assertTrue(changes.any { it.path == "new.txt" && it.changeType == com.codereview.local.model.ChangeType.ADDED })
+    }
 }
