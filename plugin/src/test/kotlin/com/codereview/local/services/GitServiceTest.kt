@@ -72,4 +72,25 @@ class GitServiceTest {
         assertNotNull(sha)
         assertTrue(sha!!.length >= 7)
     }
+
+    @Test
+    fun `should get review tags sorted`() {
+        // Create commits and tags
+        tempDir.resolve("test.txt").toFile().writeText("v1")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "c1").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "tag", "review-r0").directory(tempDir.toFile()).start().waitFor()
+
+        tempDir.resolve("test.txt").toFile().writeText("v2")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "c2").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "tag", "review-r1").directory(tempDir.toFile()).start().waitFor()
+
+        // Also create a non-review tag
+        ProcessBuilder("git", "tag", "v1.0.0").directory(tempDir.toFile()).start().waitFor()
+
+        val tags = gitService.getReviewTags()
+
+        assertEquals(listOf("review-r0", "review-r1"), tags)
+    }
 }

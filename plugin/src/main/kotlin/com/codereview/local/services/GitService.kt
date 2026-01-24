@@ -51,4 +51,12 @@ class GitService(private val projectRoot: Path) {
             null
         }
     }
+
+    fun getReviewTags(): List<String> {
+        val output = runGitCommandWithOutput("tag", "-l", "review-r*") ?: return emptyList()
+        return output.trim()
+            .split("\n")
+            .filter { it.isNotBlank() }
+            .sorted()
+    }
 }
