@@ -69,57 +69,63 @@ class DiffCommentExtension : DiffExtension() {
     }
 
     private fun setupReviewedButton(viewer: TwosideTextDiffViewer, filePath: String, basePath: String) {
-        val editor = viewer.editor2
-        val editorImpl = editor as? EditorImpl ?: return
         val reviewService = ReviewService(Path.of(basePath))
+        val editor = viewer.editor2
 
-        val buttonPanel = createReviewedButtonPanel(reviewService, filePath)
-
+        // Add a persistent gutter icon on line 0 for the reviewed toggle
         SwingUtilities.invokeLater {
-            val properties = EditorEmbeddedComponentManager.Properties(
-                EditorEmbeddedComponentManager.ResizePolicy.none(),
+            if (editor.document.lineCount == 0) return@invokeLater
+
+            val startOffset = editor.document.getLineStartOffset(0)
+            val endOffset = editor.document.getLineEndOffset(0)
+
+            val highlighter = editor.markupModel.addRangeHighlighter(
+                startOffset,
+                endOffset,
+                HighlighterLayer.LAST + 1,
                 null,
-                true,
-                false,
-                0,
-                0
+                HighlighterTargetArea.LINES_IN_RANGE
             )
 
-            EditorEmbeddedComponentManager.getInstance()
-                .addComponent(editorImpl, buttonPanel, properties)
+            highlighter.gutterIconRenderer = ReviewedGutterIcon(reviewService, filePath, highlighter)
         }
     }
 
-    private fun createReviewedButtonPanel(reviewService: ReviewService, filePath: String): JComponent {
-        val colorsScheme = EditorColorsManager.getInstance().globalScheme
-        val bgColor = colorsScheme.defaultBackground
+    private inner class ReviewedGutterIcon(
+        private val reviewService: ReviewService,
+        private val filePath: String,
+        private val highlighter: RangeHighlighter
+    ) : GutterIconRenderer() {
 
-        val panel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 4)).apply {
-            isOpaque = true
-            background = bgColor
+        override fun getIcon(): Icon {
+            val isReviewed = reviewService.isFileReviewed(filePath)
+            return if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
         }
 
-        val button = JButton().apply {
-            isFocusPainted = false
-            isContentAreaFilled = false
-            border = JBUI.Borders.empty(4, 8)
+        override fun getTooltipText(): String {
+            val isReviewed = reviewService.isFileReviewed(filePath)
+            return if (isReviewed) "File reviewed - click to unmark" else "Mark file as reviewed"
+        }
 
-            fun updateState() {
-                val isReviewed = reviewService.isFileReviewed(filePath)
-                icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
-                text = if (isReviewed) "Reviewed" else "Mark as Reviewed"
-            }
-
-            updateState()
-
-            addActionListener {
+        override fun getClickAction(): AnAction = object : AnAction() {
+            override fun actionPerformed(e: AnActionEvent) {
                 reviewService.toggleFileReviewed(filePath)
-                updateState()
+                // Force refresh by reassigning the renderer
+                highlighter.gutterIconRenderer = ReviewedGutterIcon(reviewService, filePath, highlighter)
             }
         }
 
-        panel.add(button)
-        return panel
+        override fun isNavigateAction(): Boolean = true
+
+        override fun getAlignment(): Alignment = Alignment.RIGHT
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is ReviewedGutterIcon) return false
+            return filePath == other.filePath
+        }
+
+        override fun hashCode(): Int = filePath.hashCode()
     }
 
     private fun extractFilePath(title: String): String {
