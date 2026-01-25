@@ -54,7 +54,7 @@ class ChangesPanel(
     private var currentRound: ReviewRound? = null
 
     init {
-        border = JBUI.Borders.empty(5)
+        border = JBUI.Borders.empty()
 
         // Header with single round dropdown
         val headerPanel = JPanel().apply {
