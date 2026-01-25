@@ -342,6 +342,7 @@ class DiffCommentExtension : DiffExtension() {
             rows = 3
             lineWrap = true
             wrapStyleWord = true
+            isEditable = true
             background = UIUtil.getTextFieldBackground()
             foreground = fgColor
             caretColor = fgColor
@@ -553,6 +554,7 @@ class DiffCommentExtension : DiffExtension() {
             rows = 2
             lineWrap = true
             wrapStyleWord = true
+            isEditable = true
             background = UIUtil.getTextFieldBackground()
             foreground = fgColor
             caretColor = fgColor
