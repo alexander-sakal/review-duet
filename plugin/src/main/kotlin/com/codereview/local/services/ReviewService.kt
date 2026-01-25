@@ -72,6 +72,18 @@ class ReviewService(private val projectRoot: Path) {
         saveReviewData(data)
     }
 
+    fun updateCommentText(commentId: Int, newText: String) {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val comment = data.getComment(commentId) ?: throw IllegalArgumentException("Comment not found")
+
+        val lastEntry = comment.thread.lastOrNull()
+        if (lastEntry != null) {
+            val updatedEntry = lastEntry.copy(text = newText)
+            comment.thread[comment.thread.lastIndex] = updatedEntry
+            saveReviewData(data)
+        }
+    }
+
     fun addReply(commentId: Int, text: String, asAgent: Boolean = false) {
         val data = loadReviewData() ?: throw IllegalStateException("No active review")
         val comment = data.getComment(commentId) ?: throw IllegalArgumentException("Comment not found")

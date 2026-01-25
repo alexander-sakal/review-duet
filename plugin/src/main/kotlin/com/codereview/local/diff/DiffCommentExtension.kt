@@ -16,7 +16,6 @@ import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.event.EditorMouseEvent
-import com.intellij.openapi.editor.event.EditorMouseEventArea
 import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.editor.event.EditorMouseMotionListener
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
@@ -42,11 +41,7 @@ import java.awt.*
 import java.nio.file.Path
 import javax.swing.*
 
-/**
- * Diff extension that adds comment display and editing to ReviewDiffVirtualFile diffs.
- * This extension only activates for diffs with "Review:" in the title.
- */
-class ReviewDiffCommentExtension : DiffExtension() {
+class DiffCommentExtension : DiffExtension() {
 
     override fun onViewerCreated(viewer: FrameDiffTool.DiffViewer, context: DiffContext, request: DiffRequest) {
         if (viewer !is TwosideTextDiffViewer) return
@@ -54,26 +49,28 @@ class ReviewDiffCommentExtension : DiffExtension() {
         val project = context.project ?: return
         val basePath = project.basePath ?: return
 
+        val editor = viewer.editor2
         val title = request.title ?: return
 
-        // Only activate for ReviewDiffVirtualFile diffs (title starts with "Review:")
-        if (!title.startsWith("Review:")) return
-
-        val editor = viewer.editor2
-
-        // Extract file path from title (format: "Review: path/to/file")
-        val filePath = title.removePrefix("Review:").trim()
+        // Extract file path from title
+        val filePath = extractFilePath(title)
 
         val commentInlays = mutableListOf<Inlay<*>>()
 
         setupGutterComments(editor, filePath, basePath, project, commentInlays)
 
+        // Display existing comments
         SwingUtilities.invokeLater {
-            try {
-                displayComments(editor, filePath, basePath, commentInlays)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            displayComments(editor, filePath, basePath, commentInlays)
+        }
+    }
+
+    private fun extractFilePath(title: String): String {
+        // Handle formats like "Review: path/to/file" or "path/to/file (ref1 → ref2)"
+        return when {
+            title.startsWith("Review:") -> title.removePrefix("Review:").trim()
+            title.contains(" (") -> title.substringBefore(" (")
+            else -> title
         }
     }
 
@@ -107,16 +104,14 @@ class ReviewDiffCommentExtension : DiffExtension() {
                 val offset = editor.document.getLineEndOffset(line)
 
                 val commentPanel = createCommentPanel(comment, editor, filePath, basePath, commentInlays)
-
-                // Wrap to fill editor width (like JetBrains does)
                 val wrappedPanel = EditorWidthPanel(editorImpl, commentPanel)
 
                 val properties = EditorEmbeddedComponentManager.Properties(
                     EditorEmbeddedComponentManager.ResizePolicy.none(),
-                    null,  // rendererFactory
-                    false, // relatesToPrecedingText
-                    false, // showAbove
-                    0,     // priority
+                    null,
+                    false,
+                    false,
+                    0,
                     offset
                 )
 
@@ -128,9 +123,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
         }
     }
 
-    /**
-     * Panel that fills the editor viewport width (similar to JetBrains ComponentWrapper)
-     */
     private class EditorWidthPanel(
         private val editor: EditorImpl,
         private val content: JComponent
@@ -140,7 +132,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             border = JBUI.Borders.empty()
             add(content, BorderLayout.CENTER)
 
-            // Listen for resize to update width
             editor.scrollPane.viewport.addComponentListener(object : java.awt.event.ComponentAdapter() {
                 override fun componentResized(e: java.awt.event.ComponentEvent?) {
                     revalidate()
@@ -164,9 +155,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
         }
     }
 
-    /**
-     * Unified comment component - handles both display and edit modes
-     */
     private fun createCommentPanel(
         comment: Comment,
         editor: Editor,
@@ -182,29 +170,22 @@ class ReviewDiffCommentExtension : DiffExtension() {
         val inlayPadding = 8
         val verticalGap = 4
 
-        // CardLayout to switch between display and edit modes
         val cardLayout = CardLayout()
-        val cardPanel = JPanel(cardLayout).apply {
-            isOpaque = false
-        }
+        val cardPanel = JPanel(cardLayout).apply { isOpaque = false }
 
-        // === DISPLAY MODE ===
         val displayPanel = createDisplayPanel(
             comment, editor, filePath, basePath, commentInlays,
             bgColor, fgColor, borderColor, inlayPadding, verticalGap
         ) {
-            // Switch to edit mode
             cardLayout.show(cardPanel, "edit")
             cardPanel.revalidate()
             cardPanel.repaint()
         }
 
-        // === EDIT MODE ===
         val editPanel = createEditPanel(
             comment, editor, filePath, basePath, commentInlays,
             bgColor, fgColor, borderColor, inlayPadding
         ) {
-            // Switch back to display mode
             cardLayout.show(cardPanel, "display")
             cardPanel.revalidate()
             cardPanel.repaint()
@@ -250,10 +231,7 @@ class ReviewDiffCommentExtension : DiffExtension() {
             isOpaque = false
         }
 
-        // Header: status tag + edit button (on hover)
-        val headerPanel = JPanel(BorderLayout()).apply {
-            isOpaque = false
-        }
+        val headerPanel = JPanel(BorderLayout()).apply { isOpaque = false }
 
         val statusTag = createTagLabel(comment.status.jsonValue, getStatusColor(comment.status))
 
@@ -276,7 +254,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
         contentPanel.add(headerPanel)
         contentPanel.add(Box.createVerticalStrut(verticalGap))
 
-        // Comment body
         for (entry in comment.thread) {
             val textPane = JTextArea(entry.text).apply {
                 isEditable = false
@@ -290,7 +267,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             contentPanel.add(textPane)
         }
 
-        // Bottom actions (Resolve, Fixed, Reopen)
         val bottomActionsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 12, 0)).apply {
             isOpaque = false
             border = JBUI.Borders.emptyTop(verticalGap)
@@ -323,7 +299,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
 
         hoverPanel.add(contentPanel, BorderLayout.CENTER)
 
-        // Hover listener
         object : HoverStateListener() {
             override fun hoverChanged(component: java.awt.Component, hovered: Boolean) {
                 actionsPanel.isVisible = hovered
@@ -377,7 +352,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             border = JBUI.Borders.customLine(JBColor.border(), 1)
         }
 
-        // Bottom panel: hints on left, buttons on right
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.emptyTop(8)
@@ -388,9 +362,7 @@ class ReviewDiffCommentExtension : DiffExtension() {
             font = JBFont.small()
         }
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
-            isOpaque = false
-        }
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply { isOpaque = false }
 
         val saveAndRefresh = {
             val newText = textArea.text.trim()
@@ -416,17 +388,11 @@ class ReviewDiffCommentExtension : DiffExtension() {
         panel.add(scrollPane, BorderLayout.CENTER)
         panel.add(bottomPanel, BorderLayout.SOUTH)
 
-        // Ctrl+Enter shortcut
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(
-            KeyStroke.getKeyStroke("control ENTER"), "save"
-        )
+        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("control ENTER"), "save")
         textArea.actionMap.put("save", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
-                saveAndRefresh()
-            }
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) { saveAndRefresh() }
         })
 
-        // Focus text area when panel becomes visible
         panel.addComponentListener(object : java.awt.event.ComponentAdapter() {
             override fun componentShown(e: java.awt.event.ComponentEvent?) {
                 SwingUtilities.invokeLater {
@@ -475,26 +441,25 @@ class ReviewDiffCommentExtension : DiffExtension() {
         project: Project,
         commentInlays: MutableList<Inlay<*>>
     ) {
-        val gutterHighlighters = mutableMapOf<Int, RangeHighlighter>()
+        var currentHighlighter: RangeHighlighter? = null
+        var currentLine: Int = -1
 
-        // Show gutter icon on hover over gutter area
         editor.addEditorMouseMotionListener(object : EditorMouseMotionListener {
             override fun mouseMoved(e: EditorMouseEvent) {
                 val line = e.logicalPosition.line
-                val isInGutterArea = e.area == EditorMouseEventArea.LINE_MARKERS_AREA ||
-                                     e.area == EditorMouseEventArea.ANNOTATIONS_AREA ||
-                                     e.area == EditorMouseEventArea.FOLDING_OUTLINE_AREA
 
-                // Remove existing highlighter if moving to different line
-                gutterHighlighters.values.forEach { editor.markupModel.removeHighlighter(it) }
-                gutterHighlighters.clear()
+                if (line != currentLine) {
+                    currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                    currentHighlighter = null
+                    currentLine = -1
+                }
 
-                // Add highlighter only when in gutter area
-                if (isInGutterArea && line >= 0 && line < editor.document.lineCount) {
+                if (line != currentLine && line >= 0 && line < editor.document.lineCount) {
+                    currentLine = line
                     val startOffset = editor.document.getLineStartOffset(line)
                     val endOffset = editor.document.getLineEndOffset(line)
 
-                    val highlighter = editor.markupModel.addRangeHighlighter(
+                    currentHighlighter = editor.markupModel.addRangeHighlighter(
                         startOffset,
                         endOffset,
                         HighlighterLayer.LAST,
@@ -505,28 +470,15 @@ class ReviewDiffCommentExtension : DiffExtension() {
                             editor, project, filePath, line + 1, basePath, commentInlays
                         )
                     }
-                    gutterHighlighters[line] = highlighter
                 }
             }
         })
 
         editor.addEditorMouseListener(object : EditorMouseListener {
             override fun mouseExited(e: EditorMouseEvent) {
-                gutterHighlighters.values.forEach { editor.markupModel.removeHighlighter(it) }
-                gutterHighlighters.clear()
-            }
-
-            override fun mouseClicked(e: EditorMouseEvent) {
-                // Allow clicking in the gutter area to add a comment (fallback)
-                val isInGutterArea = e.area == EditorMouseEventArea.LINE_MARKERS_AREA ||
-                                     e.area == EditorMouseEventArea.ANNOTATIONS_AREA
-
-                if (isInGutterArea && e.mouseEvent.clickCount == 1) {
-                    val line = e.logicalPosition.line
-                    if (line >= 0 && line < editor.document.lineCount) {
-                        showInlineCommentForm(editor, project, filePath, line + 1, basePath, commentInlays)
-                    }
-                }
+                currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                currentHighlighter = null
+                currentLine = -1
             }
         })
     }
@@ -558,10 +510,7 @@ class ReviewDiffCommentExtension : DiffExtension() {
             Unit
         }
 
-        val formPanel = createNewCommentPanel(
-            editor, filePath, line, basePath, commentInlays, onDismiss
-        )
-
+        val formPanel = createNewCommentPanel(editor, filePath, line, basePath, commentInlays, onDismiss)
         val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
 
         val properties = EditorEmbeddedComponentManager.Properties(
@@ -577,9 +526,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             .addComponent(editorImpl, wrappedPanel, properties)
     }
 
-    /**
-     * Creates an inline "new comment" form embedded in the editor
-     */
     private fun createNewCommentPanel(
         editor: Editor,
         filePath: String,
@@ -617,7 +563,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             border = JBUI.Borders.customLine(JBColor.border(), 1)
         }
 
-        // Bottom panel: hints on left, buttons on right
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.emptyTop(8)
@@ -628,9 +573,7 @@ class ReviewDiffCommentExtension : DiffExtension() {
             font = JBFont.small()
         }
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
-            isOpaque = false
-        }
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply { isOpaque = false }
 
         val submitAction = {
             val text = textArea.text.trim()
@@ -657,34 +600,16 @@ class ReviewDiffCommentExtension : DiffExtension() {
         panel.add(scrollPane, BorderLayout.CENTER)
         panel.add(bottomPanel, BorderLayout.SOUTH)
 
-        // Ctrl+Enter shortcut
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(
-            KeyStroke.getKeyStroke("control ENTER"), "submit"
-        )
+        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("control ENTER"), "submit")
         textArea.actionMap.put("submit", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
-                submitAction()
-            }
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) { submitAction() }
         })
 
-        // Escape to cancel
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(
-            KeyStroke.getKeyStroke("ESCAPE"), "cancel"
-        )
+        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "cancel")
         textArea.actionMap.put("cancel", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
-                onDismiss()
-            }
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) { onDismiss() }
         })
 
-        // Focus text area when panel becomes visible
-        panel.addComponentListener(object : java.awt.event.ComponentAdapter() {
-            override fun componentShown(e: java.awt.event.ComponentEvent?) {
-                SwingUtilities.invokeLater { textArea.requestFocusInWindow() }
-            }
-        })
-
-        // Also focus immediately
         SwingUtilities.invokeLater { textArea.requestFocusInWindow() }
 
         return JPanel(BorderLayout()).apply {
@@ -705,8 +630,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
 
         override fun getIcon(): Icon = AllIcons.General.Add
 
-        override fun getAlignment(): Alignment = Alignment.LEFT
-
         override fun getTooltipText(): String = "Add review comment"
 
         override fun getClickAction(): AnAction = object : AnAction() {
@@ -721,8 +644,6 @@ class ReviewDiffCommentExtension : DiffExtension() {
             return filePath == other.filePath && line == other.line
         }
 
-        override fun hashCode(): Int {
-            return 31 * filePath.hashCode() + line
-        }
+        override fun hashCode(): Int = 31 * filePath.hashCode() + line
     }
 }
