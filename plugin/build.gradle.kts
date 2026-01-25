@@ -16,7 +16,7 @@ repositories {
 
 dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    // kotlinx-coroutines is provided by IntelliJ Platform, no need to add explicitly
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
 
     intellijPlatform {
