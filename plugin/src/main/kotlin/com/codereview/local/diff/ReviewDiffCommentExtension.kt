@@ -16,6 +16,7 @@ import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.editor.event.EditorMouseEvent
+import com.intellij.openapi.editor.event.EditorMouseEventArea
 import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.editor.event.EditorMouseMotionListener
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
@@ -474,27 +475,26 @@ class ReviewDiffCommentExtension : DiffExtension() {
         project: Project,
         commentInlays: MutableList<Inlay<*>>
     ) {
-        var currentHighlighter: RangeHighlighter? = null
-        var currentLine: Int = -1
+        val gutterHighlighters = mutableMapOf<Int, RangeHighlighter>()
 
+        // Show gutter icon on hover over gutter area
         editor.addEditorMouseMotionListener(object : EditorMouseMotionListener {
             override fun mouseMoved(e: EditorMouseEvent) {
                 val line = e.logicalPosition.line
+                val isInGutterArea = e.area == EditorMouseEventArea.LINE_MARKERS_AREA ||
+                                     e.area == EditorMouseEventArea.ANNOTATIONS_AREA ||
+                                     e.area == EditorMouseEventArea.FOLDING_OUTLINE_AREA
 
-                if (line != currentLine) {
-                    currentHighlighter?.let {
-                        editor.markupModel.removeHighlighter(it)
-                    }
-                    currentHighlighter = null
-                    currentLine = -1
-                }
+                // Remove existing highlighter if moving to different line
+                gutterHighlighters.values.forEach { editor.markupModel.removeHighlighter(it) }
+                gutterHighlighters.clear()
 
-                if (line != currentLine && line >= 0 && line < editor.document.lineCount) {
-                    currentLine = line
+                // Add highlighter only when in gutter area
+                if (isInGutterArea && line >= 0 && line < editor.document.lineCount) {
                     val startOffset = editor.document.getLineStartOffset(line)
                     val endOffset = editor.document.getLineEndOffset(line)
 
-                    currentHighlighter = editor.markupModel.addRangeHighlighter(
+                    val highlighter = editor.markupModel.addRangeHighlighter(
                         startOffset,
                         endOffset,
                         HighlighterLayer.LAST,
@@ -505,19 +505,76 @@ class ReviewDiffCommentExtension : DiffExtension() {
                             editor, project, filePath, line + 1, basePath, commentInlays
                         )
                     }
+                    gutterHighlighters[line] = highlighter
                 }
             }
         })
 
         editor.addEditorMouseListener(object : EditorMouseListener {
             override fun mouseExited(e: EditorMouseEvent) {
-                currentHighlighter?.let {
-                    editor.markupModel.removeHighlighter(it)
+                gutterHighlighters.values.forEach { editor.markupModel.removeHighlighter(it) }
+                gutterHighlighters.clear()
+            }
+
+            override fun mouseClicked(e: EditorMouseEvent) {
+                // Allow clicking in the gutter area to add a comment (fallback)
+                val isInGutterArea = e.area == EditorMouseEventArea.LINE_MARKERS_AREA ||
+                                     e.area == EditorMouseEventArea.ANNOTATIONS_AREA
+
+                if (isInGutterArea && e.mouseEvent.clickCount == 1) {
+                    val line = e.logicalPosition.line
+                    if (line >= 0 && line < editor.document.lineCount) {
+                        showInlineCommentForm(editor, project, filePath, line + 1, basePath, commentInlays)
+                    }
                 }
-                currentHighlighter = null
-                currentLine = -1
             }
         })
+    }
+
+    private fun showInlineCommentForm(
+        editor: Editor,
+        project: Project,
+        filePath: String,
+        line: Int,
+        basePath: String,
+        commentInlays: MutableList<Inlay<*>>
+    ) {
+        val reviewService = ReviewService(Path.of(basePath))
+
+        if (!reviewService.hasActiveReview()) {
+            JBPopupFactory.getInstance()
+                .createMessage("No active review. Start feature development first.")
+                .showInBestPositionFor(editor)
+            return
+        }
+
+        val editorImpl = editor as? EditorImpl ?: return
+        val offset = editor.document.getLineEndOffset(line - 1)
+
+        var formInlay: Inlay<*>? = null
+
+        val onDismiss = {
+            formInlay?.dispose()
+            Unit
+        }
+
+        val formPanel = createNewCommentPanel(
+            editor, filePath, line, basePath, commentInlays, onDismiss
+        )
+
+        val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
+
+        val properties = EditorEmbeddedComponentManager.Properties(
+            EditorEmbeddedComponentManager.ResizePolicy.none(),
+            null,
+            false,
+            false,
+            100,
+            offset
+        )
+
+        formInlay = EditorEmbeddedComponentManager.getInstance()
+            .addComponent(editorImpl, wrappedPanel, properties)
     }
 
     /**
@@ -648,52 +705,14 @@ class ReviewDiffCommentExtension : DiffExtension() {
 
         override fun getIcon(): Icon = AllIcons.General.Add
 
+        override fun getAlignment(): Alignment = Alignment.LEFT
+
         override fun getTooltipText(): String = "Add review comment"
 
         override fun getClickAction(): AnAction = object : AnAction() {
             override fun actionPerformed(e: AnActionEvent) {
-                showInlineCommentForm()
+                showInlineCommentForm(editor, project, filePath, line, basePath, commentInlays)
             }
-        }
-
-        private fun showInlineCommentForm() {
-            val reviewService = ReviewService(Path.of(basePath))
-
-            if (!reviewService.hasActiveReview()) {
-                JBPopupFactory.getInstance()
-                    .createMessage("No active review. Start feature development first.")
-                    .showInBestPositionFor(editor)
-                return
-            }
-
-            val editorImpl = editor as? EditorImpl ?: return
-            val offset = editor.document.getLineEndOffset(line - 1)
-
-            // Track the form inlay so we can dispose it
-            var formInlay: Inlay<*>? = null
-
-            val onDismiss = {
-                formInlay?.dispose()
-                Unit
-            }
-
-            val formPanel = createNewCommentPanel(
-                editor, filePath, line, basePath, commentInlays, onDismiss
-            )
-
-            val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
-
-            val properties = EditorEmbeddedComponentManager.Properties(
-                EditorEmbeddedComponentManager.ResizePolicy.none(),
-                null,
-                false,
-                false,
-                100, // Higher priority to show above existing comments
-                offset
-            )
-
-            formInlay = EditorEmbeddedComponentManager.getInstance()
-                .addComponent(editorImpl, wrappedPanel, properties)
         }
 
         override fun equals(other: Any?): Boolean {
