@@ -14,6 +14,10 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.util.UserDataHolder
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -21,7 +25,6 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
-import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -54,24 +57,21 @@ class ChangesPanel(
     private var currentRound: ReviewRound? = null
 
     init {
-        border = JBUI.Borders.empty()
-
-        // Header with single round dropdown
-        val headerPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.X_AXIS)
-            add(JLabel("Review Round: "))
-            add(roundCombo)
-            add(Box.createHorizontalGlue())
+        // Toolbar with round selector and actions
+        val actionGroup = DefaultActionGroup().apply {
+            add(object : AnAction("Review All Files", "Open diff view for all changed files", AllIcons.Actions.Diff) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    openAllDiffs()
+                }
+            })
         }
 
-        // Footer with Review All button
-        val footerPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.X_AXIS)
-            add(JButton("Review All Files").apply {
-                icon = AllIcons.Actions.Diff
-                addActionListener { openAllDiffs() }
-            })
-            add(Box.createHorizontalGlue())
+        val toolbar = ActionManager.getInstance().createActionToolbar("ChangesPanel", actionGroup, true)
+        toolbar.targetComponent = this
+
+        val toolbarPanel = JPanel(BorderLayout()).apply {
+            add(roundCombo, BorderLayout.CENTER)
+            add(toolbar.component, BorderLayout.EAST)
         }
 
         // Setup combo
@@ -95,9 +95,8 @@ class ChangesPanel(
             }
         })
 
-        add(headerPanel, BorderLayout.NORTH)
+        add(toolbarPanel, BorderLayout.NORTH)
         add(JBScrollPane(fileTree), BorderLayout.CENTER)
-        add(footerPanel, BorderLayout.SOUTH)
 
         refreshRounds()
     }
