@@ -29,29 +29,38 @@ import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
+/**
+ * Represents a review round with its comparison refs.
+ */
+data class ReviewRound(
+    val number: Int,
+    val fromRef: String,
+    val toRef: String,
+    val isLatest: Boolean
+) {
+    override fun toString(): String = if (isLatest) "Round $number (current)" else "Round $number"
+}
+
 class ChangesPanel(
     private val project: Project,
     private val gitService: GitService
 ) : JPanel(BorderLayout()) {
 
-    private val fromCombo = JComboBox<String>()
-    private val toCombo = JComboBox<String>()
+    private val roundCombo = JComboBox<ReviewRound>()
     private val rootNode = DefaultMutableTreeNode("Changes")
     private val treeModel = DefaultTreeModel(rootNode)
     private val fileTree = Tree(treeModel)
     private var currentChanges: List<ChangedFile> = emptyList()
+    private var currentRound: ReviewRound? = null
 
     init {
         border = JBUI.Borders.empty(5)
 
-        // Header with dropdowns
+        // Header with single round dropdown
         val headerPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
-            add(JLabel("From: "))
-            add(fromCombo)
-            add(Box.createHorizontalStrut(10))
-            add(JLabel("To: "))
-            add(toCombo)
+            add(JLabel("Review Round: "))
+            add(roundCombo)
             add(Box.createHorizontalGlue())
         }
 
@@ -65,9 +74,11 @@ class ChangesPanel(
             add(Box.createHorizontalGlue())
         }
 
-        // Setup combos
-        fromCombo.addActionListener { refreshFileList() }
-        toCombo.addActionListener { refreshFileList() }
+        // Setup combo
+        roundCombo.addActionListener {
+            currentRound = roundCombo.selectedItem as? ReviewRound
+            refreshFileList()
+        }
 
         // Setup file tree
         fileTree.cellRenderer = ChangedFileTreeRenderer()
@@ -88,57 +99,77 @@ class ChangesPanel(
         add(JBScrollPane(fileTree), BorderLayout.CENTER)
         add(footerPanel, BorderLayout.SOUTH)
 
-        refreshTags()
+        refreshRounds()
     }
 
     fun refresh() {
-        refreshTags()
+        refreshRounds()
     }
 
-    private fun refreshTags() {
-        val tags = gitService.getReviewTags()
-        val selectedFrom = fromCombo.selectedItem as? String
-        val selectedTo = toCombo.selectedItem as? String
+    private fun refreshRounds() {
+        val tags = gitService.getReviewTags().sorted()
+        val previousSelection = roundCombo.selectedItem as? ReviewRound
 
-        fromCombo.removeAllItems()
-        toCombo.removeAllItems()
+        roundCombo.removeAllItems()
 
-        tags.forEach { tag ->
-            fromCombo.addItem(tag)
-            toCombo.addItem(tag)
+        if (tags.isEmpty()) {
+            currentRound = null
+            refreshFileList()
+            return
         }
 
-        // Restore selection or set defaults
-        if (tags.isNotEmpty()) {
-            if (selectedFrom != null && tags.contains(selectedFrom)) {
-                fromCombo.selectedItem = selectedFrom
-            } else if (tags.size >= 2) {
-                fromCombo.selectedIndex = tags.size - 2
-            }
+        // Build rounds: each round compares previous tag to current tag
+        // Latest round compares last tag to HEAD
+        val rounds = mutableListOf<ReviewRound>()
 
-            if (selectedTo != null && tags.contains(selectedTo)) {
-                toCombo.selectedItem = selectedTo
+        for (i in 1 until tags.size) {
+            rounds.add(ReviewRound(
+                number = i,
+                fromRef = tags[i - 1],
+                toRef = tags[i],
+                isLatest = false
+            ))
+        }
+
+        // Add the "current" round that compares last tag to HEAD
+        val lastTag = tags.last()
+        val currentRoundNumber = tags.size
+        rounds.add(ReviewRound(
+            number = currentRoundNumber,
+            fromRef = lastTag,
+            toRef = "HEAD",
+            isLatest = true
+        ))
+
+        rounds.forEach { roundCombo.addItem(it) }
+
+        // Restore selection or select latest
+        if (previousSelection != null) {
+            val match = rounds.find { it.number == previousSelection.number }
+            if (match != null) {
+                roundCombo.selectedItem = match
             } else {
-                toCombo.selectedIndex = tags.size - 1
+                roundCombo.selectedIndex = rounds.size - 1
             }
+        } else {
+            roundCombo.selectedIndex = rounds.size - 1
         }
 
+        currentRound = roundCombo.selectedItem as? ReviewRound
         refreshFileList()
     }
 
     private fun refreshFileList() {
-        val fromRef = fromCombo.selectedItem as? String ?: return
-        val toRef = toCombo.selectedItem as? String ?: return
-
+        val round = currentRound
         rootNode.removeAllChildren()
 
-        if (fromRef == toRef) {
+        if (round == null) {
             currentChanges = emptyList()
             treeModel.reload()
             return
         }
 
-        currentChanges = gitService.getChangedFiles(fromRef, toRef)
+        currentChanges = gitService.getChangedFiles(round.fromRef, round.toRef)
         buildTree(currentChanges)
         treeModel.reload()
         expandAllNodes()
@@ -219,8 +250,9 @@ class ChangesPanel(
     }
 
     private fun createDiffChain(startIndex: Int): DiffRequestChain {
-        val fromRef = fromCombo.selectedItem as? String ?: ""
-        val toRef = toCombo.selectedItem as? String ?: ""
+        val round = currentRound ?: return EmptyDiffChain()
+        val fromRef = round.fromRef
+        val toRef = round.toRef
 
         val producers = currentChanges.map { file ->
             object : DiffRequestProducer {
@@ -234,25 +266,32 @@ class ChangesPanel(
 
                     val toContent = when (file.changeType) {
                         ChangeType.DELETED -> ""
-                        else -> gitService.getFileAtRef(toRef, file.path) ?: ""
+                        else -> if (toRef == "HEAD") {
+                            gitService.getFileAtRef("HEAD", file.path) ?: ""
+                        } else {
+                            gitService.getFileAtRef(toRef, file.path) ?: ""
+                        }
                     }
 
                     // Get file type for syntax highlighting
                     val fileName = file.path.substringAfterLast('/')
                     val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
 
+                    val toLabel = if (toRef == "HEAD") "Working Copy" else toRef
+
                     val contentFactory = DiffContentFactory.getInstance()
                     return SimpleDiffRequest(
-                        "${file.path} ($fromRef → $toRef)",
+                        "${file.path} ($fromRef → $toLabel)",
                         contentFactory.create(project, fromContent, fileType),
                         contentFactory.create(project, toContent, fileType),
                         fromRef,
-                        toRef
+                        toLabel
                     )
                 }
             }
         }
 
+        @Suppress("OVERRIDE_DEPRECATION")
         return object : UserDataHolderBase(), DiffRequestChain {
             private var currentIndex = startIndex
 
@@ -260,6 +299,13 @@ class ChangesPanel(
             override fun getIndex(): Int = currentIndex
             override fun setIndex(index: Int) { currentIndex = index }
         }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    private class EmptyDiffChain : UserDataHolderBase(), DiffRequestChain {
+        override fun getRequests(): List<DiffRequestProducer> = emptyList()
+        override fun getIndex(): Int = 0
+        override fun setIndex(index: Int) {}
     }
 
     private class ChangedFileTreeRenderer : ColoredTreeCellRenderer() {
