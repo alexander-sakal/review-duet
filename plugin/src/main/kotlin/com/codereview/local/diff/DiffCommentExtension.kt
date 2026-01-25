@@ -8,9 +8,13 @@ import com.intellij.diff.DiffExtension
 import com.intellij.diff.FrameDiffTool
 import com.intellij.diff.requests.DiffRequest
 import com.intellij.diff.tools.util.side.TwosideTextDiffViewer
+import com.intellij.diff.tools.util.base.DiffViewerBase
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
@@ -59,10 +63,86 @@ class DiffCommentExtension : DiffExtension() {
 
         setupGutterComments(editor, filePath, basePath, project, commentInlays)
 
+        // Add reviewed action to context
+        setupReviewedAction(viewer, context, filePath, basePath)
+
         // Display existing comments
         SwingUtilities.invokeLater {
             displayComments(editor, filePath, basePath, commentInlays)
         }
+    }
+
+    private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, basePath: String) {
+        val reviewService = ReviewService(Path.of(basePath))
+
+        // Store the file path in the context for the action to access
+        context.putUserData(FILE_PATH_KEY, filePath)
+        context.putUserData(BASE_PATH_KEY, basePath)
+
+        // Add a review toolbar panel to the viewer
+        SwingUtilities.invokeLater {
+            addReviewToolbar(viewer, reviewService, filePath)
+        }
+    }
+
+    private fun addReviewToolbar(viewer: TwosideTextDiffViewer, reviewService: ReviewService, filePath: String) {
+        val viewerComponent = viewer.component
+
+        // Find the top-level component that contains the toolbar
+        val parent = viewerComponent.parent
+        if (parent is JComponent) {
+            val reviewPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 4)).apply {
+                isOpaque = true
+                background = UIUtil.getPanelBackground()
+                border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
+
+                add(JBLabel("Review:").apply {
+                    foreground = UIUtil.getLabelDisabledForeground()
+                })
+
+                val button = JButton().apply {
+                    fun updateState() {
+                        val isReviewed = reviewService.isFileReviewed(filePath)
+                        icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
+                        text = if (isReviewed) "Reviewed" else "Mark Reviewed"
+                    }
+                    updateState()
+                    addActionListener {
+                        reviewService.toggleFileReviewed(filePath)
+                        updateState()
+                    }
+                    isFocusPainted = false
+                    isContentAreaFilled = false
+                    border = JBUI.Borders.empty(2, 8)
+                    cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                }
+                add(button)
+            }
+
+            // Try to add at the top
+            if (parent.layout is BorderLayout) {
+                // Check if NORTH is already occupied
+                val existingNorth = (parent.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
+                if (existingNorth != null) {
+                    // Wrap existing north component with our panel
+                    val wrapper = JPanel(BorderLayout()).apply {
+                        add(reviewPanel, BorderLayout.NORTH)
+                        add(existingNorth, BorderLayout.CENTER)
+                    }
+                    parent.remove(existingNorth)
+                    parent.add(wrapper, BorderLayout.NORTH)
+                } else {
+                    parent.add(reviewPanel, BorderLayout.NORTH)
+                }
+                parent.revalidate()
+                parent.repaint()
+            }
+        }
+    }
+
+    companion object {
+        val FILE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.FilePath")
+        val BASE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.BasePath")
     }
 
     private fun extractFilePath(title: String): String {

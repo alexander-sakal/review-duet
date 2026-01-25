@@ -1,6 +1,8 @@
 package com.codereview.local.actions
 
+import com.codereview.local.diff.DiffCommentExtension
 import com.codereview.local.services.ReviewService
+import com.intellij.diff.DiffContext
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -12,25 +14,23 @@ import java.nio.file.Path
 class MarkFileReviewedAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        val basePath = project.basePath ?: return
-        val filePath = getFilePath(e) ?: return
+        val (basePath, filePath) = getPathsFromEvent(e) ?: return
 
         val reviewService = ReviewService(Path.of(basePath))
         reviewService.toggleFileReviewed(filePath)
     }
 
     override fun update(e: AnActionEvent) {
-        val project = e.project
-        val basePath = project?.basePath
-        val filePath = getFilePath(e)
+        val paths = getPathsFromEvent(e)
 
-        if (project == null || basePath == null || filePath == null) {
+        if (paths == null) {
             e.presentation.isEnabledAndVisible = false
             return
         }
 
+        val (basePath, filePath) = paths
         val reviewService = ReviewService(Path.of(basePath))
+
         if (!reviewService.hasActiveReview()) {
             e.presentation.isEnabledAndVisible = false
             return
@@ -45,23 +45,33 @@ class MarkFileReviewedAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
-    private fun getFilePath(e: AnActionEvent): String? {
+    private fun getPathsFromEvent(e: AnActionEvent): Pair<String, String>? {
         val project = e.project ?: return null
-        val basePath = project.basePath ?: return null
+        val projectBasePath = project.basePath ?: return null
 
-        // Try to get from diff request
+        // Try to get from diff context (set by our DiffCommentExtension)
+        val diffContext = e.getData(DiffDataKeys.DIFF_CONTEXT)
+        if (diffContext != null) {
+            val filePath = diffContext.getUserData(DiffCommentExtension.FILE_PATH_KEY)
+            val basePath = diffContext.getUserData(DiffCommentExtension.BASE_PATH_KEY)
+            if (filePath != null && basePath != null) {
+                return basePath to filePath
+            }
+        }
+
+        // Try to get from diff request title
         val diffRequest = e.getData(DiffDataKeys.DIFF_REQUEST)
         if (diffRequest != null) {
             val title = diffRequest.title
             if (title != null) {
-                return extractFilePath(title)
+                return projectBasePath to extractFilePath(title)
             }
         }
 
         // Try to get from virtual file
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
         if (virtualFile != null) {
-            return virtualFile.path.removePrefix("$basePath/")
+            return projectBasePath to virtualFile.path.removePrefix("$projectBasePath/")
         }
 
         return null
