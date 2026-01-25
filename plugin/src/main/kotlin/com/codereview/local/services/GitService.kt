@@ -12,6 +12,10 @@ class GitService(private val projectRoot: Path) {
         return runGitCommand("tag", tagName) == 0
     }
 
+    fun createTagAtCommit(tagName: String, commitSha: String): Boolean {
+        return runGitCommand("tag", tagName, commitSha) == 0
+    }
+
     fun tagExists(tagName: String): Boolean {
         return runGitCommand("rev-parse", "--verify", "refs/tags/$tagName") == 0
     }

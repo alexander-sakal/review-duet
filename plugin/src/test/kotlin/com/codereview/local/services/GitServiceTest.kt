@@ -140,4 +140,39 @@ class GitServiceTest {
         assertTrue(commits[0].sha.length == 40)
         assertTrue(commits[0].shortSha.length == 7)
     }
+
+    @Test
+    fun `should create tag at specific commit`() {
+        // Create two commits
+        tempDir.resolve("test.txt").toFile().writeText("v1")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "First commit").directory(tempDir.toFile()).start().waitFor()
+
+        val firstCommitSha = gitService.getCurrentCommitSha()
+
+        tempDir.resolve("test.txt").toFile().writeText("v2")
+        ProcessBuilder("git", "add", ".").directory(tempDir.toFile()).start().waitFor()
+        ProcessBuilder("git", "commit", "-m", "Second commit").directory(tempDir.toFile()).start().waitFor()
+
+        // Create tag at first commit (not HEAD)
+        val result = gitService.createTagAtCommit("review-r0", firstCommitSha!!)
+
+        assertTrue(result)
+        assertTrue(gitService.tagExists("review-r0"))
+
+        // Verify tag points to first commit
+        val tagSha = runGitCommandWithOutput("rev-parse", "--short", "review-r0")?.trim()
+        assertEquals(firstCommitSha, tagSha)
+    }
+
+    private fun runGitCommandWithOutput(vararg args: String): String? {
+        return try {
+            val process = ProcessBuilder("git", *args)
+                .directory(tempDir.toFile())
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor()
+            if (process.exitValue() == 0) process.inputStream.bufferedReader().readText() else null
+        } catch (e: Exception) { null }
+    }
 }
