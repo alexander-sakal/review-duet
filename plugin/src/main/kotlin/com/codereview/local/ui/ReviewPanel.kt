@@ -1,6 +1,7 @@
 package com.codereview.local.ui
 
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.model.CommitInfo
 import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.openapi.project.Project
@@ -12,7 +13,9 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.nio.file.Path
 import javax.swing.BoxLayout
+import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
+import javax.swing.JComboBox
 import com.intellij.ui.components.JBTabbedPane
 import javax.swing.SwingConstants
 
@@ -25,6 +28,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private val reviewService: ReviewService by lazy { ReviewService(basePath) }
     private val gitService: GitService by lazy { GitService(basePath) }
     private val changesPanel: ChangesPanel by lazy { ChangesPanel(project, gitService) }
+    private var commitComboBox: JComboBox<CommitInfo>? = null
 
     init {
         border = JBUI.Borders.empty(10)
@@ -53,26 +57,35 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 horizontalAlignment = SwingConstants.CENTER
             }
 
-            val button = JButton("Start Feature Development").apply {
-                addActionListener { startFeatureDevelopment() }
+            val selectLabel = JBLabel("Select baseline commit:")
+
+            val commits = gitService.getRecentCommits(25)
+            commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
+                if (commits.isNotEmpty()) selectedIndex = 0
             }
 
-            val description = JBLabel("<html><center>Creates baseline tag and initializes<br/>review folder</center></html>").apply {
-                foreground = java.awt.Color.GRAY
+            val button = JButton("Start Review").apply {
+                addActionListener { startReview() }
             }
 
             val gbc = GridBagConstraints().apply {
                 gridx = 0
                 gridy = 0
                 insets = JBUI.insets(5)
+                fill = GridBagConstraints.HORIZONTAL
             }
             add(label, gbc)
 
             gbc.gridy = 1
-            add(button, gbc)
+            gbc.insets = JBUI.insets(15, 5, 5, 5)
+            add(selectLabel, gbc)
 
             gbc.gridy = 2
-            add(description, gbc)
+            gbc.insets = JBUI.insets(5)
+            add(commitComboBox, gbc)
+
+            gbc.gridy = 3
+            add(button, gbc)
         }
 
         add(centerPanel, BorderLayout.CENTER)
@@ -138,14 +151,13 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         popup.show()
     }
 
-    private fun startFeatureDevelopment() {
-        // Check if we have a clean git state
-        val currentSha = gitService.getCurrentCommitSha()
-        if (currentSha == null) {
+    private fun startReview() {
+        val selectedCommit = commitComboBox?.selectedItem as? CommitInfo
+        if (selectedCommit == null) {
             com.intellij.openapi.ui.Messages.showErrorDialog(
                 project,
-                "Could not get current commit. Make sure you have at least one commit in the repository.",
-                "Git Error"
+                "Please select a commit to start the review from.",
+                "No Commit Selected"
             )
             return
         }
@@ -163,7 +175,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             // Note: For MVP, we'll skip the delete step
         }
 
-        if (!gitService.createTag(tagName)) {
+        if (!gitService.createTagAtCommit(tagName, selectedCommit.sha)) {
             com.intellij.openapi.ui.Messages.showErrorDialog(project, "Failed to create git tag", "Git Error")
             return
         }
@@ -174,7 +186,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
         com.intellij.openapi.ui.Messages.showInfoMessage(
             project,
-            "Feature development started!\n\nBaseline tag '$tagName' created at commit $currentSha",
+            "Review started!\n\nBaseline tag '$tagName' created at commit ${selectedCommit.shortSha}",
             "Review Initialized"
         )
     }
