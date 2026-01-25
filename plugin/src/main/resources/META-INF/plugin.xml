@@ -52,7 +52,7 @@
                 text="Mark Reviewed"
                 icon="AllIcons.Actions.CheckOut"
                 description="Toggle file reviewed status">
-            <add-to-group group-id="Diff.EditorToolbar" anchor="last"/>
+            <add-to-group group-id="Diff.ViewerToolbar" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>
