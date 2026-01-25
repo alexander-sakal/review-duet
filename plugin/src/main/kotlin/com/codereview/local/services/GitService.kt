@@ -2,6 +2,7 @@ package com.codereview.local.services
 
 import com.codereview.local.model.ChangeType
 import com.codereview.local.model.ChangedFile
+import com.codereview.local.model.CommitInfo
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
@@ -75,5 +76,22 @@ class GitService(private val projectRoot: Path) {
                 )
             }
             .filter { it.path.isNotBlank() }
+    }
+
+    fun getRecentCommits(limit: Int = 25): List<CommitInfo> {
+        val output = runGitCommandWithOutput("log", "--format=%H|%h|%s", "-n", limit.toString())
+            ?: return emptyList()
+        return output.trim()
+            .split("\n")
+            .filter { it.isNotBlank() }
+            .map { line ->
+                val parts = line.split("|", limit = 3)
+                CommitInfo(
+                    sha = parts.getOrElse(0) { "" },
+                    shortSha = parts.getOrElse(1) { "" },
+                    message = parts.getOrElse(2) { "" }
+                )
+            }
+            .filter { it.sha.isNotBlank() }
     }
 }
