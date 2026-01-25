@@ -59,44 +59,9 @@ class DiffCommentExtension : DiffExtension() {
 
         setupGutterComments(editor, filePath, basePath, project, commentInlays)
 
-        // Add reviewed button to the diff toolbar
-        setupReviewedButton(viewer, filePath, basePath)
-
         // Display existing comments
         SwingUtilities.invokeLater {
             displayComments(editor, filePath, basePath, commentInlays)
-        }
-    }
-
-    private fun setupReviewedButton(viewer: TwosideTextDiffViewer, filePath: String, basePath: String) {
-        val reviewService = ReviewService(Path.of(basePath))
-        val editorImpl = viewer.editor2 as? EditorImpl ?: return
-
-        SwingUtilities.invokeLater {
-            val scrollPane = editorImpl.scrollPane
-
-            val button = JButton().apply {
-                fun updateState() {
-                    val isReviewed = reviewService.isFileReviewed(filePath)
-                    icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
-                    text = if (isReviewed) "Reviewed" else "Mark Reviewed"
-                    toolTipText = if (isReviewed) "Click to unmark as reviewed" else "Mark this file as reviewed"
-                }
-                updateState()
-                addActionListener {
-                    reviewService.toggleFileReviewed(filePath)
-                    updateState()
-                }
-                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                border = JBUI.Borders.empty(2, 8)
-            }
-
-            val headerPanel = JPanel(BorderLayout()).apply {
-                add(button, BorderLayout.EAST)
-                border = JBUI.Borders.empty(2)
-            }
-
-            scrollPane.setColumnHeaderView(headerPanel)
         }
     }
 
