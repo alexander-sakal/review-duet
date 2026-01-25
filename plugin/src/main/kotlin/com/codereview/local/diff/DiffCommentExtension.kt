@@ -338,7 +338,13 @@ class DiffCommentExtension : DiffExtension() {
             )
         }
 
-        val textArea = JBTextArea(originalText).apply {
+        val textArea = object : JBTextArea(originalText) {
+            override fun processKeyEvent(e: java.awt.event.KeyEvent) {
+                super.processKeyEvent(e)
+                // Mark as consumed to prevent propagation to editor
+                e.consume()
+            }
+        }.apply {
             rows = 3
             lineWrap = true
             wrapStyleWord = true
@@ -550,7 +556,13 @@ class DiffCommentExtension : DiffExtension() {
             )
         }
 
-        val textArea = JBTextArea().apply {
+        val textArea = object : JBTextArea() {
+            override fun processKeyEvent(e: java.awt.event.KeyEvent) {
+                super.processKeyEvent(e)
+                // Mark as consumed to prevent propagation to editor
+                e.consume()
+            }
+        }.apply {
             rows = 2
             lineWrap = true
             wrapStyleWord = true
