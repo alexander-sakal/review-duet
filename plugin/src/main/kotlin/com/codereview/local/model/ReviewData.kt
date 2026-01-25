@@ -45,7 +45,8 @@ data class ReviewData(
     val version: Int,
     var currentRound: String,
     val baseRef: String,
-    val comments: MutableList<Comment>
+    val comments: MutableList<Comment>,
+    val reviewedFiles: MutableSet<String> = mutableSetOf()
 ) {
     fun getComment(id: Int): Comment? = comments.find { it.id == id }
 
@@ -53,6 +54,16 @@ data class ReviewData(
 
     fun getCommentsByStatus(status: CommentStatus): List<Comment> =
         comments.filter { it.status == status }
+
+    fun isFileReviewed(filePath: String): Boolean = reviewedFiles.contains(filePath)
+
+    fun markFileReviewed(filePath: String) {
+        reviewedFiles.add(filePath)
+    }
+
+    fun unmarkFileReviewed(filePath: String) {
+        reviewedFiles.remove(filePath)
+    }
 }
 
 enum class ChangeType(val symbol: String) {

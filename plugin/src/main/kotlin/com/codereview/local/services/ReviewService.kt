@@ -111,4 +111,34 @@ class ReviewService(private val projectRoot: Path) {
         data.currentRound = roundTag
         saveReviewData(data)
     }
+
+    fun isFileReviewed(filePath: String): Boolean {
+        val data = loadReviewData() ?: return false
+        return data.isFileReviewed(filePath)
+    }
+
+    fun markFileReviewed(filePath: String) {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        data.markFileReviewed(filePath)
+        saveReviewData(data)
+    }
+
+    fun unmarkFileReviewed(filePath: String) {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        data.unmarkFileReviewed(filePath)
+        saveReviewData(data)
+    }
+
+    fun toggleFileReviewed(filePath: String): Boolean {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val isNowReviewed = if (data.isFileReviewed(filePath)) {
+            data.unmarkFileReviewed(filePath)
+            false
+        } else {
+            data.markFileReviewed(filePath)
+            true
+        }
+        saveReviewData(data)
+        return isNowReviewed
+    }
 }

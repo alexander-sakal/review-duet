@@ -9,8 +9,10 @@ import com.intellij.diff.FrameDiffTool
 import com.intellij.diff.requests.DiffRequest
 import com.intellij.diff.tools.util.side.TwosideTextDiffViewer
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
@@ -59,9 +61,53 @@ class DiffCommentExtension : DiffExtension() {
 
         setupGutterComments(editor, filePath, basePath, project, commentInlays)
 
+        // Add reviewed button to the diff toolbar
+        setupReviewedButton(viewer, filePath, basePath)
+
         // Display existing comments
         SwingUtilities.invokeLater {
             displayComments(editor, filePath, basePath, commentInlays)
+        }
+    }
+
+    private fun setupReviewedButton(viewer: TwosideTextDiffViewer, filePath: String, basePath: String) {
+        val reviewService = ReviewService(Path.of(basePath))
+
+        val action = object : AnAction() {
+            override fun actionPerformed(e: AnActionEvent) {
+                val isReviewed = reviewService.toggleFileReviewed(filePath)
+                e.presentation.icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
+                e.presentation.text = if (isReviewed) "Reviewed" else "Mark as Reviewed"
+            }
+
+            override fun update(e: AnActionEvent) {
+                val isReviewed = reviewService.isFileReviewed(filePath)
+                e.presentation.icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
+                e.presentation.text = if (isReviewed) "Reviewed" else "Mark as Reviewed"
+                e.presentation.description = if (isReviewed) "File marked as reviewed" else "Mark this file as reviewed"
+            }
+
+            override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+        }
+
+        val actionGroup = DefaultActionGroup().apply {
+            add(action)
+        }
+
+        val toolbar = ActionManager.getInstance().createActionToolbar("DiffReviewToolbar", actionGroup, true)
+        toolbar.targetComponent = viewer.component
+
+        // Add toolbar to the diff viewer's component
+        SwingUtilities.invokeLater {
+            val component = viewer.component
+            if (component is JPanel) {
+                val toolbarWrapper = JPanel(BorderLayout()).apply {
+                    add(toolbar.component, BorderLayout.EAST)
+                    isOpaque = false
+                }
+                component.add(toolbarWrapper, BorderLayout.NORTH)
+                component.revalidate()
+            }
         }
     }
 
