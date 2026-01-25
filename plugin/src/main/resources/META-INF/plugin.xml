@@ -16,6 +16,7 @@
             language=""
             implementationClass="com.codereview.local.gutter.ReviewGutterProvider"/>
         <diff.DiffExtension implementation="com.codereview.local.diff.DiffCommentExtension"/>
+        <fileEditorProvider implementation="com.codereview.local.diff.ReviewDiffEditorProvider"/>
     </extensions>
 
     <projectListeners>
@@ -37,6 +38,14 @@
                 description="Open the source file at current line">
             <keyboard-shortcut keymap="$default" first-keystroke="F4"/>
             <add-to-group group-id="Diff.EditorPopupMenu" anchor="first"/>
+        </action>
+        <action id="ReviewDuet.OpenReviewDiff"
+                class="com.codereview.local.actions.OpenReviewDiffAction"
+                text="Open Review Diff"
+                description="Open diff view with review comments">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="VcsGroup" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt R"/>
         </action>
     </actions>
 </idea-plugin>
