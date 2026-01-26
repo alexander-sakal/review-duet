@@ -282,20 +282,25 @@ class ChangesPanel(
                 is ChangedFile -> {
                     // File node
                     val isReviewed = reviewService.isFileReviewed(userObject.path)
+                    val fileName = userObject.path.substringAfterLast('/')
 
-                    val (color, baseStyle) = when (userObject.changeType) {
-                        ChangeType.ADDED -> JBColor.GREEN to SimpleTextAttributes.STYLE_BOLD
-                        ChangeType.MODIFIED -> JBColor.BLUE to SimpleTextAttributes.STYLE_PLAIN
-                        ChangeType.DELETED -> JBColor.RED to SimpleTextAttributes.STYLE_PLAIN
+                    // Get file type icon
+                    val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+                    icon = fileType.icon
+
+                    // Color based on change type (like IntelliJ's VCS)
+                    val color = when (userObject.changeType) {
+                        ChangeType.ADDED -> JBColor(0x007F00, 0x629755)    // Green
+                        ChangeType.MODIFIED -> JBColor(0x0032A0, 0x6897BB) // Blue
+                        ChangeType.DELETED -> JBColor(0x787878, 0x787878) // Gray
                     }
 
                     // Add strikethrough for reviewed files
-                    val style = if (isReviewed) baseStyle or SimpleTextAttributes.STYLE_STRIKEOUT else baseStyle
-                    val attrs = SimpleTextAttributes(style, if (isReviewed) JBColor.GRAY else null)
+                    val style = if (isReviewed) SimpleTextAttributes.STYLE_STRIKEOUT else SimpleTextAttributes.STYLE_PLAIN
+                    val textColor = if (isReviewed) JBColor.GRAY else color
+                    val attrs = SimpleTextAttributes(style, textColor)
 
-                    icon = if (isReviewed) AllIcons.Actions.Commit else AllIcons.FileTypes.Any_type
-                    append("${userObject.changeType.symbol}  ", SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, color))
-                    append(userObject.path.substringAfterLast('/'), attrs)
+                    append(fileName, attrs)
                 }
                 is String -> {
                     // Directory node
