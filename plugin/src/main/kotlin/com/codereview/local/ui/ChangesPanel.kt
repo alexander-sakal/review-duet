@@ -295,12 +295,13 @@ class ChangesPanel(
                         ChangeType.DELETED -> JBColor(0x787878, 0x787878) // Gray
                     }
 
-                    // Add strikethrough for reviewed files
-                    val style = if (isReviewed) SimpleTextAttributes.STYLE_STRIKEOUT else SimpleTextAttributes.STYLE_PLAIN
-                    val textColor = if (isReviewed) JBColor.GRAY else color
-                    val attrs = SimpleTextAttributes(style, textColor)
-
+                    val attrs = SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, color)
                     append(fileName, attrs)
+
+                    // Green checkmark for reviewed files
+                    if (isReviewed) {
+                        append("  ✓", SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, JBColor(0x007F00, 0x629755)))
+                    }
                 }
                 is String -> {
                     // Directory node
