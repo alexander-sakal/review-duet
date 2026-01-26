@@ -10,9 +10,8 @@ export function formatComment(comment: Comment): string {
 
   const statusTag = `[${comment.status}]`;
   const location = `${comment.file}:${comment.line}`;
-  const refTag = `@${comment.ref}`;
 
-  lines.push(`#${comment.id} ${statusTag} ${location} ${refTag}`);
+  lines.push(`#${comment.id} ${statusTag} ${location}`);
 
   // Show first user message
   const firstUserMsg = comment.thread.find(t => t.author === 'user');

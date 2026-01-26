@@ -32,7 +32,7 @@ class ReviewServiceTest {
         val reviewDir = tempDir.resolve(".review")
         reviewDir.createDirectories()
         reviewDir.resolve("comments.json").writeText("""
-            {"version": 1, "currentRound": "review-r1", "baseRef": "review-r0", "comments": []}
+            {"version": 1, "baseCommit": "abc1234", "comments": []}
         """.trimIndent())
 
         assertTrue(service.hasActiveReview())
@@ -45,10 +45,9 @@ class ReviewServiceTest {
         reviewDir.resolve("comments.json").writeText("""
             {
                 "version": 1,
-                "currentRound": "review-r1",
-                "baseRef": "review-r0",
+                "baseCommit": "abc1234",
                 "comments": [
-                    {"id": 1, "file": "test.kt", "line": 10, "ref": "review-r1", "status": "open", "resolveCommit": null, "thread": []}
+                    {"id": 1, "file": "test.kt", "line": 10, "commit": "abc1234", "status": "open", "resolveCommit": null, "thread": []}
                 ]
             }
         """.trimIndent())
@@ -56,24 +55,23 @@ class ReviewServiceTest {
         val data = service.loadReviewData()
 
         assertNotNull(data)
-        assertEquals("review-r1", data?.currentRound)
+        assertEquals("abc1234", data?.baseCommit)
         assertEquals(1, data?.comments?.size)
     }
 
     @Test
     fun `should initialize new review`() {
-        service.initializeReview("review-r0")
+        service.initializeReview("abc1234")
 
         val data = service.loadReviewData()
         assertNotNull(data)
-        assertEquals("review-r0", data?.currentRound)
-        assertEquals("review-r0", data?.baseRef)
+        assertEquals("abc1234", data?.baseCommit)
         assertTrue(data?.comments?.isEmpty() == true)
     }
 
     @Test
     fun `should add comment`() {
-        service.initializeReview("review-r0")
+        service.initializeReview("abc1234")
 
         service.addComment("src/Test.kt", 42, "Fix this bug")
 

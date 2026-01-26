@@ -22,14 +22,13 @@ describe('show command', () => {
   it('should show full comment details', () => {
     const data = {
       version: 1,
-      currentRound: 'review-r1',
-      baseRef: 'review-r0',
+      baseCommit: 'abc1234',
       comments: [
         {
           id: 1,
           file: 'src/Example.php',
           line: 42,
-          ref: 'review-r1',
+          commit: 'abc1234',
           status: 'pending-user',
           resolveCommit: null,
           thread: [
@@ -54,10 +53,9 @@ describe('show command', () => {
   it('should include git command hint', () => {
     const data = {
       version: 1,
-      currentRound: 'review-r1',
-      baseRef: 'review-r0',
+      baseCommit: 'abc1234',
       comments: [
-        { id: 1, file: 'src/Example.php', line: 42, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Test', at: '2024-01-23T10:00:00Z' }] }
+        { id: 1, file: 'src/Example.php', line: 42, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Test', at: '2024-01-23T10:00:00Z' }] }
       ]
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
@@ -65,14 +63,13 @@ describe('show command', () => {
     const store = new ReviewStore(tempDir);
     const output = showComment(store, 1);
 
-    expect(output).toContain('git show review-r1:src/Example.php');
+    expect(output).toContain('git show abc1234:src/Example.php');
   });
 
   it('should throw if comment not found', () => {
     const data = {
       version: 1,
-      currentRound: 'review-r1',
-      baseRef: 'review-r0',
+      baseCommit: 'abc1234',
       comments: []
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));

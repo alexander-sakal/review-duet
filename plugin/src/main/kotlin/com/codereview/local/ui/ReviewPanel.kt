@@ -100,13 +100,13 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun showActiveReviewPanel() {
         val data = reviewService.loadReviewData() ?: return
 
-        // Header - round number is the count of review tags
-        val roundNumber = gitService.getReviewTags().size
+        // Header - show base commit and progress
+        val shortCommit = data.baseCommit.take(7)
         val headerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(0, 10, 10, 10)
 
-            add(JBLabel("Round: $roundNumber"))
+            add(JBLabel("Reviewing changes since: $shortCommit"))
 
             val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
             val totalCount = data.comments.size
@@ -131,11 +131,11 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         // Action buttons
         val buttonPanel = JBPanel<JBPanel<*>>().apply {
             layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT)
-            add(JButton("New Round").apply {
-                addActionListener { startNewRound() }
-            })
             add(JButton("Refresh").apply {
                 addActionListener { refresh() }
+            })
+            add(JButton("End Review").apply {
+                addActionListener { endReview() }
             })
         }
 
@@ -170,57 +170,31 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             return
         }
 
-        // Create baseline tag
-        val tagName = "review-r0"
-        if (gitService.tagExists(tagName)) {
-            val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
-                project,
-                "Tag '$tagName' already exists. Delete and recreate?",
-                "Tag Exists",
-                com.intellij.openapi.ui.Messages.getQuestionIcon()
-            )
-            if (result != com.intellij.openapi.ui.Messages.YES) return
-            // Note: For MVP, we'll skip the delete step
-        }
-
-        if (!gitService.createTagAtCommit(tagName, selectedCommit.sha)) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(project, "Failed to create git tag", "Git Error")
-            return
-        }
-
-        // Initialize review
-        reviewService.initializeReview(tagName)
+        // Initialize review with the selected commit SHA
+        reviewService.initializeReview(selectedCommit.sha)
         refresh()
 
         com.intellij.openapi.ui.Messages.showInfoMessage(
             project,
-            "Review started!\n\nBaseline tag '$tagName' created at commit ${selectedCommit.shortSha}",
+            "Review started!\n\nReviewing changes since commit ${selectedCommit.shortSha}",
             "Review Initialized"
         )
     }
 
-    private fun startNewRound() {
-        val data = reviewService.loadReviewData() ?: return
-
-        // Calculate next round number
-        val currentNum = data.currentRound.substringAfter("review-r").toIntOrNull() ?: 0
-        val newRound = "review-r${currentNum + 1}"
-
-        // Create new tag
-        if (!gitService.createTag(newRound)) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(project, "Failed to create git tag '$newRound'", "Git Error")
-            return
-        }
-
-        // Update review data
-        reviewService.startNewRound(newRound)
-        refresh()
-
-        val sha = gitService.getCurrentCommitSha() ?: "unknown"
-        com.intellij.openapi.ui.Messages.showInfoMessage(
+    private fun endReview() {
+        val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
             project,
-            "New review round started!\n\nTag '$newRound' created at commit $sha",
-            "New Round"
+            "End this review session? The .review folder will be deleted.",
+            "End Review",
+            com.intellij.openapi.ui.Messages.getQuestionIcon()
         )
+        if (result != com.intellij.openapi.ui.Messages.YES) return
+
+        // Delete .review folder
+        val reviewDir = basePath.resolve(".review").toFile()
+        if (reviewDir.exists()) {
+            reviewDir.deleteRecursively()
+        }
+        refresh()
     }
 }

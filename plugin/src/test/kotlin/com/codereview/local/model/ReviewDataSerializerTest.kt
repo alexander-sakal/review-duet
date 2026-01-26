@@ -12,14 +12,13 @@ class ReviewDataSerializerTest {
         val json = """
         {
           "version": 1,
-          "currentRound": "review-r1",
-          "baseRef": "review-r0",
+          "baseCommit": "abc1234",
           "comments": [
             {
               "id": 1,
               "file": "src/Example.php",
               "line": 42,
-              "ref": "review-r1",
+              "commit": "abc1234",
               "status": "open",
               "resolveCommit": null,
               "thread": [
@@ -33,7 +32,7 @@ class ReviewDataSerializerTest {
         val data = serializer.deserialize(json)
 
         assertEquals(1, data.version)
-        assertEquals("review-r1", data.currentRound)
+        assertEquals("abc1234", data.baseCommit)
         assertEquals(1, data.comments.size)
         assertEquals(CommentStatus.OPEN, data.comments[0].status)
     }
@@ -42,14 +41,13 @@ class ReviewDataSerializerTest {
     fun `should serialize to valid JSON`() {
         val data = ReviewData(
             version = 1,
-            currentRound = "review-r1",
-            baseRef = "review-r0",
+            baseCommit = "abc1234",
             comments = mutableListOf(
                 Comment(
                     id = 1,
                     file = "test.kt",
                     line = 10,
-                    ref = "review-r1",
+                    commit = "abc1234",
                     status = CommentStatus.OPEN,
                     resolveCommit = null,
                     thread = mutableListOf(
@@ -62,22 +60,20 @@ class ReviewDataSerializerTest {
         val json = serializer.serialize(data)
 
         assertTrue(json.contains("\"status\": \"open\""))
-        assertTrue(json.contains("\"currentRound\": \"review-r1\""))
+        assertTrue(json.contains("\"baseCommit\": \"abc1234\""))
     }
 
     @Test
     fun `should round-trip data correctly`() {
         val original = ReviewData(
             version = 1,
-            currentRound = "review-r2",
-            baseRef = "review-r0",
+            baseCommit = "abc1234",
             comments = mutableListOf()
         )
 
         val json = serializer.serialize(original)
         val restored = serializer.deserialize(json)
 
-        assertEquals(original.currentRound, restored.currentRound)
-        assertEquals(original.baseRef, restored.baseRef)
+        assertEquals(original.baseCommit, restored.baseCommit)
     }
 }

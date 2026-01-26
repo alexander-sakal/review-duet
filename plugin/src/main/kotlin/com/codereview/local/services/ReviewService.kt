@@ -31,11 +31,10 @@ class ReviewService(private val projectRoot: Path) {
         cachedData = data
     }
 
-    fun initializeReview(baseRef: String) {
+    fun initializeReview(baseCommit: String) {
         val data = ReviewData(
             version = 1,
-            currentRound = baseRef,
-            baseRef = baseRef,
+            baseCommit = baseCommit,
             comments = mutableListOf()
         )
         saveReviewData(data)
@@ -48,7 +47,7 @@ class ReviewService(private val projectRoot: Path) {
             id = data.getNextCommentId(),
             file = file,
             line = line,
-            ref = data.currentRound,
+            commit = data.baseCommit,
             status = CommentStatus.OPEN,
             resolveCommit = null,
             thread = mutableListOf(
@@ -103,12 +102,6 @@ class ReviewService(private val projectRoot: Path) {
             comment.status = CommentStatus.PENDING_AGENT
         }
 
-        saveReviewData(data)
-    }
-
-    fun startNewRound(roundTag: String) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
-        data.currentRound = roundTag
         saveReviewData(data)
     }
 

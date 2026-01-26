@@ -29,7 +29,7 @@ data class Comment(
     val id: Int,
     val file: String,
     val line: Int,
-    val ref: String,
+    val commit: String,
     var status: CommentStatus,
     var resolveCommit: String?,
     val thread: MutableList<ThreadEntry>
@@ -43,8 +43,7 @@ data class Comment(
 
 data class ReviewData(
     val version: Int,
-    var currentRound: String,
-    val baseRef: String,
+    val baseCommit: String,
     val comments: MutableList<Comment>,
     val reviewedFiles: MutableSet<String> = mutableSetOf()
 ) {

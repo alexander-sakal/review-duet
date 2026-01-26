@@ -13,7 +13,7 @@ import java.nio.file.Path
 
 /**
  * Editor provider for ReviewDiffVirtualFile.
- * Creates a diff editor showing changes since baseRef.
+ * Creates a diff editor showing changes since baseCommit.
  */
 class ReviewDiffEditorProvider : FileEditorProvider, DumbAware {
 
@@ -26,12 +26,12 @@ class ReviewDiffEditorProvider : FileEditorProvider, DumbAware {
         val basePath = Path.of(project.basePath!!)
 
         val diffRequest = ReviewDiffRequestProducer.createDiffRequest(
-            project, basePath, reviewFile.filePath, reviewFile.baseRef
+            project, basePath, reviewFile.filePath, reviewFile.baseCommit
         ) ?: SimpleDiffRequest(
             "Review: ${reviewFile.filePath}",
             DiffContentFactory.getInstance().createEmpty(),
             DiffContentFactory.getInstance().createEmpty(),
-            reviewFile.baseRef,
+            reviewFile.baseCommit,
             "Current"
         )
 

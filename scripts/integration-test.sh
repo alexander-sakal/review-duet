@@ -28,19 +28,21 @@ EOF
 git add .
 git commit -m "Initial commit"
 
+# Get current commit for baseCommit
+BASE_COMMIT=$(git rev-parse HEAD)
+
 # Create review directory and comments
 mkdir -p .review
-cat > .review/comments.json << 'EOF'
+cat > .review/comments.json << EOF
 {
   "version": 1,
-  "currentRound": "review-r1",
-  "baseRef": "review-r0",
+  "baseCommit": "$BASE_COMMIT",
   "comments": [
     {
       "id": 1,
       "file": "src/Example.php",
       "line": 4,
-      "ref": "review-r1",
+      "commit": "$BASE_COMMIT",
       "status": "open",
       "resolveCommit": null,
       "thread": [

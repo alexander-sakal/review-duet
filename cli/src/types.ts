@@ -31,7 +31,7 @@ export interface Comment {
   id: number;
   file: string;
   line: number;
-  ref: string;
+  commit: string;
   status: CommentStatus;
   resolveCommit: string | null;
   thread: ThreadEntry[];
@@ -39,7 +39,6 @@ export interface Comment {
 
 export interface ReviewData {
   version: number;
-  currentRound: string;
-  baseRef: string;
+  baseCommit: string;
   comments: Comment[];
 }

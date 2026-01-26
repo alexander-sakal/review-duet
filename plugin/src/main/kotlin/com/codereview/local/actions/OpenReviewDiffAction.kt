@@ -25,7 +25,7 @@ class OpenReviewDiffAction : AnAction("Open Review Diff", "Open diff view for cu
         val relativePath = vFile.path.removePrefix("$basePath/")
 
         // Create and open virtual file
-        val reviewDiffFile = ReviewDiffVirtualFile(project, relativePath, reviewData.baseRef)
+        val reviewDiffFile = ReviewDiffVirtualFile(project, relativePath, reviewData.baseCommit)
         FileEditorManager.getInstance(project).openFile(reviewDiffFile, true)
     }
 

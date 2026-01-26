@@ -54,10 +54,9 @@ describe('CLI', () => {
     it('should run list command', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: [
-          { id: 1, file: 'a.ts', line: 1, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Test', at: '2024-01-23T10:00:00Z' }] }
+          { id: 1, file: 'a.ts', line: 1, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Test', at: '2024-01-23T10:00:00Z' }] }
         ]
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));

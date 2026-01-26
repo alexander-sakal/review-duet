@@ -3,6 +3,7 @@ package com.codereview.local.ui
 import com.codereview.local.model.ChangeType
 import com.codereview.local.model.ChangedFile
 import com.codereview.local.services.GitService
+import com.codereview.local.services.ReviewService
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManager
@@ -23,42 +24,36 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.nio.file.Path
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
-
-/**
- * Represents a review round with its comparison refs.
- */
-data class ReviewRound(
-    val number: Int,
-    val fromRef: String,
-    val toRef: String,
-    val isLatest: Boolean
-) {
-    override fun toString(): String = if (isLatest) "Round $number (current)" else "Round $number"
-}
 
 class ChangesPanel(
     private val project: Project,
     private val gitService: GitService
 ) : JPanel(BorderLayout()) {
 
-    private val roundCombo = JComboBox<ReviewRound>()
+    private val basePath: Path by lazy {
+        Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
+    }
+    private val reviewService: ReviewService by lazy { ReviewService(basePath) }
+
     private val rootNode = DefaultMutableTreeNode("Changes")
     private val treeModel = DefaultTreeModel(rootNode)
     private val fileTree = Tree(treeModel)
     private var currentChanges: List<ChangedFile> = emptyList()
-    private var currentRound: ReviewRound? = null
+    private var baseCommit: String? = null
 
     init {
-        // Toolbar with round selector and actions
+        // Toolbar with actions
         val actionGroup = DefaultActionGroup().apply {
             add(object : AnAction("Review All Files", "Open diff view for all changed files", AllIcons.Actions.Diff) {
                 override fun actionPerformed(e: AnActionEvent) {
@@ -72,14 +67,7 @@ class ChangesPanel(
 
         val toolbarPanel = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.emptyBottom(8)
-            add(roundCombo, BorderLayout.CENTER)
             add(toolbar.component, BorderLayout.EAST)
-        }
-
-        // Setup combo
-        roundCombo.addActionListener {
-            currentRound = roundCombo.selectedItem as? ReviewRound
-            refreshFileList()
         }
 
         // Setup file tree
@@ -104,80 +92,28 @@ class ChangesPanel(
         add(toolbarPanel, BorderLayout.NORTH)
         add(scrollPane, BorderLayout.CENTER)
 
-        refreshRounds()
+        refreshFileList()
     }
 
     fun refresh() {
         border = JBUI.Borders.empty()
-        refreshRounds()
+        refreshFileList()
         revalidate()
         repaint()
     }
 
-    private fun refreshRounds() {
-        val tags = gitService.getReviewTags().sorted()
-        val previousSelection = roundCombo.selectedItem as? ReviewRound
-
-        roundCombo.removeAllItems()
-
-        if (tags.isEmpty()) {
-            currentRound = null
-            refreshFileList()
-            return
-        }
-
-        // Build rounds: each round compares previous tag to current tag
-        // Latest round compares last tag to HEAD
-        val rounds = mutableListOf<ReviewRound>()
-
-        for (i in 1 until tags.size) {
-            rounds.add(ReviewRound(
-                number = i,
-                fromRef = tags[i - 1],
-                toRef = tags[i],
-                isLatest = false
-            ))
-        }
-
-        // Add the "current" round that compares last tag to HEAD
-        val lastTag = tags.last()
-        val currentRoundNumber = tags.size
-        rounds.add(ReviewRound(
-            number = currentRoundNumber,
-            fromRef = lastTag,
-            toRef = "HEAD",
-            isLatest = true
-        ))
-
-        rounds.forEach { roundCombo.addItem(it) }
-
-        // Restore selection or select latest
-        if (previousSelection != null) {
-            val match = rounds.find { it.number == previousSelection.number }
-            if (match != null) {
-                roundCombo.selectedItem = match
-            } else {
-                roundCombo.selectedIndex = rounds.size - 1
-            }
-        } else {
-            roundCombo.selectedIndex = rounds.size - 1
-        }
-
-        currentRound = roundCombo.selectedItem as? ReviewRound
-        refreshFileList()
-    }
-
     private fun refreshFileList() {
-        val round = currentRound
+        val data = reviewService.loadReviewData()
+        baseCommit = data?.baseCommit
         rootNode.removeAllChildren()
 
-        if (round == null) {
+        if (baseCommit == null) {
             currentChanges = emptyList()
             treeModel.reload()
             return
         }
 
-        currentChanges = gitService.getChangedFiles(round.fromRef, round.toRef)
+        currentChanges = gitService.getChangedFiles(baseCommit!!, "HEAD")
         buildTree(currentChanges)
         treeModel.reload()
         expandAllNodes()
@@ -242,7 +178,7 @@ class ChangesPanel(
     }
 
     private fun openDiffAtFile(file: ChangedFile) {
-        if (currentChanges.isEmpty()) return
+        if (currentChanges.isEmpty() || baseCommit == null) return
 
         val startIndex = currentChanges.indexOf(file).coerceAtLeast(0)
         val chain = createDiffChain(startIndex)
@@ -251,16 +187,15 @@ class ChangesPanel(
     }
 
     private fun openAllDiffs() {
-        if (currentChanges.isEmpty()) return
+        if (currentChanges.isEmpty() || baseCommit == null) return
 
         val chain = createDiffChain(0)
         DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
     }
 
     private fun createDiffChain(startIndex: Int): DiffRequestChain {
-        val round = currentRound ?: return EmptyDiffChain()
-        val fromRef = round.fromRef
-        val toRef = round.toRef
+        val fromRef = baseCommit ?: return EmptyDiffChain()
+        val shortRef = fromRef.take(7)
 
         val producers = currentChanges.map { file ->
             object : DiffRequestProducer {
@@ -274,26 +209,20 @@ class ChangesPanel(
 
                     val toContent = when (file.changeType) {
                         ChangeType.DELETED -> ""
-                        else -> if (toRef == "HEAD") {
-                            gitService.getFileAtRef("HEAD", file.path) ?: ""
-                        } else {
-                            gitService.getFileAtRef(toRef, file.path) ?: ""
-                        }
+                        else -> gitService.getFileAtRef("HEAD", file.path) ?: ""
                     }
 
                     // Get file type for syntax highlighting
                     val fileName = file.path.substringAfterLast('/')
                     val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
 
-                    val toLabel = if (toRef == "HEAD") "Working Copy" else toRef
-
                     val contentFactory = DiffContentFactory.getInstance()
                     return SimpleDiffRequest(
-                        "${file.path} ($fromRef → $toLabel)",
+                        "${file.path} ($shortRef → Working Copy)",
                         contentFactory.create(project, fromContent, fileType),
                         contentFactory.create(project, toContent, fileType),
-                        fromRef,
-                        toLabel
+                        shortRef,
+                        "Working Copy"
                     )
                 }
             }

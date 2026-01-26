@@ -12,7 +12,7 @@ export function showComment(store: ReviewStore, id: number): string {
   lines.push(`Comment #${comment.id}`);
   lines.push(`File: ${comment.file}:${comment.line}`);
   lines.push(`Status: ${comment.status}`);
-  lines.push(`Ref: ${comment.ref}`);
+  lines.push(`Commit: ${comment.commit}`);
 
   if (comment.resolveCommit) {
     lines.push(`Resolve Commit: ${comment.resolveCommit}`);
@@ -31,7 +31,7 @@ export function showComment(store: ReviewStore, id: number): string {
   }
 
   lines.push('─'.repeat(40));
-  lines.push(`View original: git show ${comment.ref}:${comment.file}`);
+  lines.push(`View original: git show ${comment.commit}:${comment.file}`);
 
   return lines.join('\n');
 }

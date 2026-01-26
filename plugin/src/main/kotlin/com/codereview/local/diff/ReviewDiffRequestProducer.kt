@@ -16,7 +16,7 @@ object ReviewDiffRequestProducer {
         project: Project,
         basePath: Path,
         filePath: String,
-        baseRef: String
+        baseCommit: String
     ): SimpleDiffRequest? {
         val contentFactory = DiffContentFactory.getInstance()
 
@@ -31,7 +31,7 @@ object ReviewDiffRequestProducer {
 
         val baseContent = try {
             val contentBytes = git4idea.util.GitFileUtils.getFileContent(
-                project, repo.root, baseRef, filePath
+                project, repo.root, baseCommit, filePath
             )
             contentFactory.create(String(contentBytes), currentVf?.fileType)
         } catch (e: Exception) {
@@ -49,7 +49,7 @@ object ReviewDiffRequestProducer {
             "Review: $filePath",
             baseContent,
             currentContent,
-            baseRef,
+            baseCommit,
             "Current"
         )
     }

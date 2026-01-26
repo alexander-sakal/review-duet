@@ -21,8 +21,7 @@ describe('ReviewStore', () => {
     it('should load existing review data', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: []
       };
 
@@ -33,7 +32,7 @@ describe('ReviewStore', () => {
       const loaded = store.load();
 
       expect(loaded.version).toBe(1);
-      expect(loaded.currentRound).toBe('review-r1');
+      expect(loaded.baseCommit).toBe('abc1234');
     });
 
     it('should throw if no review file exists', () => {
@@ -47,15 +46,14 @@ describe('ReviewStore', () => {
       const store = new ReviewStore(tempDir);
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: []
       };
 
       store.save(data);
 
       const saved = JSON.parse(fs.readFileSync(reviewPath, 'utf-8'));
-      expect(saved.currentRound).toBe('review-r1');
+      expect(saved.baseCommit).toBe('abc1234');
     });
   });
 
@@ -63,11 +61,10 @@ describe('ReviewStore', () => {
     it('should return comment by id', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: [
-          { id: 1, file: 'test.ts', line: 10, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [] },
-          { id: 2, file: 'test.ts', line: 20, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [] }
+          { id: 1, file: 'test.ts', line: 10, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [] },
+          { id: 2, file: 'test.ts', line: 20, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [] }
         ]
       };
 
@@ -83,8 +80,7 @@ describe('ReviewStore', () => {
     it('should return undefined for non-existent id', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: []
       };
 

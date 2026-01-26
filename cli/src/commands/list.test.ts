@@ -25,7 +25,7 @@ describe('list command', () => {
         id: 1,
         file: 'src/Example.php',
         line: 42,
-        ref: 'review-r1',
+        commit: 'abc1234',
         status: 'open' as const,
         resolveCommit: null,
         thread: [{ author: 'user' as const, text: 'Fix this bug', at: '2024-01-23T10:00:00Z' }]
@@ -44,7 +44,7 @@ describe('list command', () => {
         id: 2,
         file: 'src/Example.php',
         line: 87,
-        ref: 'review-r1',
+        commit: 'abc1234',
         status: 'pending-user' as const,
         resolveCommit: null,
         thread: [
@@ -64,11 +64,10 @@ describe('list command', () => {
     it('should list all comments when no filter', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: [
-          { id: 1, file: 'a.ts', line: 1, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Comment 1', at: '2024-01-23T10:00:00Z' }] },
-          { id: 2, file: 'b.ts', line: 2, ref: 'review-r1', status: 'fixed', resolveCommit: 'abc123', thread: [{ author: 'user', text: 'Comment 2', at: '2024-01-23T10:00:00Z' }] }
+          { id: 1, file: 'a.ts', line: 1, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Comment 1', at: '2024-01-23T10:00:00Z' }] },
+          { id: 2, file: 'b.ts', line: 2, commit: 'abc1234', status: 'fixed', resolveCommit: 'abc123', thread: [{ author: 'user', text: 'Comment 2', at: '2024-01-23T10:00:00Z' }] }
         ]
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));
@@ -83,11 +82,10 @@ describe('list command', () => {
     it('should filter by status', () => {
       const data = {
         version: 1,
-        currentRound: 'review-r1',
-        baseRef: 'review-r0',
+        baseCommit: 'abc1234',
         comments: [
-          { id: 1, file: 'a.ts', line: 1, ref: 'review-r1', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Comment 1', at: '2024-01-23T10:00:00Z' }] },
-          { id: 2, file: 'b.ts', line: 2, ref: 'review-r1', status: 'fixed', resolveCommit: 'abc123', thread: [{ author: 'user', text: 'Comment 2', at: '2024-01-23T10:00:00Z' }] }
+          { id: 1, file: 'a.ts', line: 1, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Comment 1', at: '2024-01-23T10:00:00Z' }] },
+          { id: 2, file: 'b.ts', line: 2, commit: 'abc1234', status: 'fixed', resolveCommit: 'abc123', thread: [{ author: 'user', text: 'Comment 2', at: '2024-01-23T10:00:00Z' }] }
         ]
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));
