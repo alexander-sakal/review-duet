@@ -265,7 +265,7 @@ class ChangesPanel(
         override fun setIndex(index: Int) {}
     }
 
-    private class ChangedFileTreeRenderer : ColoredTreeCellRenderer() {
+    private inner class ChangedFileTreeRenderer : ColoredTreeCellRenderer() {
         override fun customizeCellRenderer(
             tree: JTree,
             value: Any?,
@@ -281,13 +281,19 @@ class ChangesPanel(
             when (userObject) {
                 is ChangedFile -> {
                     // File node
-                    val (color, attrs) = when (userObject.changeType) {
-                        ChangeType.ADDED -> JBColor.GREEN to SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
-                        ChangeType.MODIFIED -> JBColor.BLUE to SimpleTextAttributes.REGULAR_ATTRIBUTES
-                        ChangeType.DELETED -> JBColor.RED to SimpleTextAttributes.REGULAR_ATTRIBUTES
+                    val isReviewed = reviewService.isFileReviewed(userObject.path)
+
+                    val (color, baseStyle) = when (userObject.changeType) {
+                        ChangeType.ADDED -> JBColor.GREEN to SimpleTextAttributes.STYLE_BOLD
+                        ChangeType.MODIFIED -> JBColor.BLUE to SimpleTextAttributes.STYLE_PLAIN
+                        ChangeType.DELETED -> JBColor.RED to SimpleTextAttributes.STYLE_PLAIN
                     }
 
-                    icon = AllIcons.FileTypes.Any_type
+                    // Add strikethrough for reviewed files
+                    val style = if (isReviewed) baseStyle or SimpleTextAttributes.STYLE_STRIKEOUT else baseStyle
+                    val attrs = SimpleTextAttributes(style, if (isReviewed) JBColor.GRAY else null)
+
+                    icon = if (isReviewed) AllIcons.Actions.Commit else AllIcons.FileTypes.Any_type
                     append("${userObject.changeType.symbol}  ", SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, color))
                     append(userObject.path.substringAfterLast('/'), attrs)
                 }
