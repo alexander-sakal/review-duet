@@ -14,7 +14,11 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.PlatformCoreDataKeys
+import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
@@ -42,6 +46,8 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.*
+import java.awt.KeyboardFocusManager
+import java.awt.event.KeyEvent
 import java.nio.file.Path
 import javax.swing.*
 
@@ -143,6 +149,47 @@ class DiffCommentExtension : DiffExtension() {
     companion object {
         val FILE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.FilePath")
         val BASE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.BasePath")
+
+        /**
+         * Suppresses the outer editor context so that editor actions don't steal key events
+         * from embedded input components. This prevents "Read-only view" messages when
+         * typing in comment forms embedded in the diff viewer.
+         */
+        private fun suppressOuterEditorData(sink: DataSink) {
+            arrayOf(
+                CommonDataKeys.EDITOR,
+                CommonDataKeys.HOST_EDITOR,
+                CommonDataKeys.CARET,
+                CommonDataKeys.VIRTUAL_FILE, CommonDataKeys.VIRTUAL_FILE_ARRAY,
+                CommonDataKeys.LANGUAGE,
+                CommonDataKeys.PSI_FILE, CommonDataKeys.PSI_ELEMENT,
+                PlatformCoreDataKeys.FILE_EDITOR,
+                PlatformCoreDataKeys.PSI_ELEMENT_ARRAY
+            ).forEach {
+                sink.setNull(it)
+            }
+        }
+
+        /**
+         * Wraps a component to create a proper focus isolation boundary that prevents
+         * the diff editor from intercepting key events.
+         */
+        fun wrapForFocusIsolation(component: JComponent): JComponent {
+            return JPanel(BorderLayout()).apply {
+                isOpaque = false
+                isFocusCycleRoot = true
+                isFocusTraversalPolicyProvider = true
+                focusTraversalPolicy = LayoutFocusTraversalPolicy()
+                // Only Escape should exit to the editor
+                setFocusTraversalKeys(
+                    KeyboardFocusManager.UP_CYCLE_TRAVERSAL_KEYS,
+                    setOf(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0))
+                )
+                add(UiDataProvider.wrapComponent(component) { sink ->
+                    suppressOuterEditorData(sink)
+                }, BorderLayout.CENTER)
+            }
+        }
     }
 
     private fun extractFilePath(title: String): String {
@@ -418,13 +465,7 @@ class DiffCommentExtension : DiffExtension() {
             )
         }
 
-        val textArea = object : JBTextArea(originalText) {
-            override fun processKeyEvent(e: java.awt.event.KeyEvent) {
-                super.processKeyEvent(e)
-                // Mark as consumed to prevent propagation to editor
-                e.consume()
-            }
-        }.apply {
+        val textArea = JBTextArea(originalText).apply {
             rows = 3
             lineWrap = true
             wrapStyleWord = true
@@ -489,7 +530,7 @@ class DiffCommentExtension : DiffExtension() {
             }
         })
 
-        return panel
+        return wrapForFocusIsolation(panel)
     }
 
     private fun createTagLabel(text: String, color: Color): JComponent {
@@ -636,13 +677,7 @@ class DiffCommentExtension : DiffExtension() {
             )
         }
 
-        val textArea = object : JBTextArea() {
-            override fun processKeyEvent(e: java.awt.event.KeyEvent) {
-                super.processKeyEvent(e)
-                // Mark as consumed to prevent propagation to editor
-                e.consume()
-            }
-        }.apply {
+        val textArea = JBTextArea().apply {
             rows = 2
             lineWrap = true
             wrapStyleWord = true
@@ -706,11 +741,12 @@ class DiffCommentExtension : DiffExtension() {
 
         SwingUtilities.invokeLater { textArea.requestFocusInWindow() }
 
-        return JPanel(BorderLayout()).apply {
+        val outerPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.empty(4, 8, 4, 8)
             add(panel, BorderLayout.CENTER)
         }
+        return wrapForFocusIsolation(outerPanel)
     }
 
     private inner class AddCommentGutterIcon(

@@ -25,7 +25,12 @@ class CommentListPanel(
         commentList.selectionMode = ListSelectionModel.SINGLE_SELECTION
         commentList.addListSelectionListener { e ->
             if (!e.valueIsAdjusting) {
-                commentList.selectedValue?.let { onCommentSelected(it) }
+                val selected = commentList.selectedValue
+                if (selected != null) {
+                    // Clear selection immediately to prevent re-triggering
+                    commentList.clearSelection()
+                    onCommentSelected(selected)
+                }
             }
         }
 

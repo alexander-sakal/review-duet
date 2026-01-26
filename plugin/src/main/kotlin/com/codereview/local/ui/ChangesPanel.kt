@@ -25,6 +25,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
+import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -70,6 +71,7 @@ class ChangesPanel(
         toolbar.targetComponent = this
 
         val toolbarPanel = JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.emptyBottom(8)
             add(roundCombo, BorderLayout.CENTER)
             add(toolbar.component, BorderLayout.EAST)
         }
@@ -95,14 +97,21 @@ class ChangesPanel(
             }
         })
 
+        val scrollPane = JBScrollPane(fileTree).apply {
+            border = JBUI.Borders.empty()
+        }
+
         add(toolbarPanel, BorderLayout.NORTH)
-        add(JBScrollPane(fileTree), BorderLayout.CENTER)
+        add(scrollPane, BorderLayout.CENTER)
 
         refreshRounds()
     }
 
     fun refresh() {
+        border = JBUI.Borders.empty()
         refreshRounds()
+        revalidate()
+        repaint()
     }
 
     private fun refreshRounds() {

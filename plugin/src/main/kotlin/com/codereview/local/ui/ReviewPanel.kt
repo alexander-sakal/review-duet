@@ -29,13 +29,19 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private val gitService: GitService by lazy { GitService(basePath) }
     private val changesPanel: ChangesPanel by lazy { ChangesPanel(project, gitService) }
     private var commitComboBox: JComboBox<CommitInfo>? = null
+    private var selectedTabIndex: Int = 0
 
     init {
-        border = JBUI.Borders.empty(10)
+        border = JBUI.Borders.empty(10, 0)
         refresh()
     }
 
     fun refresh() {
+        // Save current tab before removing components
+        components.filterIsInstance<JBTabbedPane>().firstOrNull()?.let {
+            selectedTabIndex = it.selectedIndex
+        }
+
         removeAll()
 
         if (reviewService.hasActiveReview()) {
@@ -94,12 +100,13 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun showActiveReviewPanel() {
         val data = reviewService.loadReviewData() ?: return
 
-        // Header
+        // Header - round number is the count of review tags
+        val roundNumber = gitService.getReviewTags().size
         val headerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(0, 0, 10, 0)
+            border = JBUI.Borders.empty(0, 10, 10, 10)
 
-            add(JBLabel("Round: ${data.currentRound} (vs ${data.baseRef})"))
+            add(JBLabel("Round: $roundNumber"))
 
             val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
             val totalCount = data.comments.size
@@ -118,6 +125,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val tabbedPane = JBTabbedPane().apply {
             addTab("Comments", commentsContent)
             addTab("Changes", changesPanel)
+            selectedIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
         }
 
         // Action buttons
