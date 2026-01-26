@@ -17,6 +17,7 @@ import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
 import javax.swing.JComboBox
 import com.intellij.ui.components.JBTabbedPane
+import javax.swing.JSeparator
 import javax.swing.SwingConstants
 
 class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLayout()) {
@@ -100,17 +101,21 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun showActiveReviewPanel() {
         val data = reviewService.loadReviewData() ?: return
 
-        // Header - show base commit and progress
+        // Header - show base commit and progress with separator below
         val shortCommit = data.baseCommit.take(7)
-        val headerPanel = JBPanel<JBPanel<*>>().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(0, 10, 10, 10)
+        val headerPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            val infoPanel = JBPanel<JBPanel<*>>().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                border = JBUI.Borders.empty(0, 10, 8, 10)
 
-            add(JBLabel("Reviewing changes since: $shortCommit"))
+                add(JBLabel("Reviewing changes since: $shortCommit"))
 
-            val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
-            val totalCount = data.comments.size
-            add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
+                val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
+                val totalCount = data.comments.size
+                add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
+            }
+            add(infoPanel, BorderLayout.CENTER)
+            add(JSeparator(), BorderLayout.SOUTH)
         }
 
         // Comment list panel
@@ -128,15 +133,19 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             selectedIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
         }
 
-        // Action buttons
-        val buttonPanel = JBPanel<JBPanel<*>>().apply {
-            layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT)
-            add(JButton("Refresh").apply {
-                addActionListener { refresh() }
-            })
-            add(JButton("End Review").apply {
-                addActionListener { endReview() }
-            })
+        // Action buttons with separator above
+        val buttonPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            add(JSeparator(), BorderLayout.NORTH)
+            val buttonsContainer = JBPanel<JBPanel<*>>().apply {
+                layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 8)
+                add(JButton("Refresh").apply {
+                    addActionListener { refresh() }
+                })
+                add(JButton("End Review").apply {
+                    addActionListener { endReview() }
+                })
+            }
+            add(buttonsContainer, BorderLayout.CENTER)
         }
 
         add(headerPanel, BorderLayout.NORTH)
