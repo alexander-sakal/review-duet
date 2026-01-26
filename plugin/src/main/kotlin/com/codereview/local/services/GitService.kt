@@ -82,6 +82,14 @@ class GitService(private val projectRoot: Path) {
             .filter { it.path.isNotBlank() }
     }
 
+    fun getChangedFilePaths(fromRef: String, toRef: String): Set<String> {
+        val output = runGitCommandWithOutput("diff", "--name-only", "$fromRef..$toRef") ?: return emptySet()
+        return output.trim()
+            .split("\n")
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
     fun getRecentCommits(limit: Int = 25): List<CommitInfo> {
         val output = runGitCommandWithOutput("log", "--format=%H|%h|%s", "-n", limit.toString())
             ?: return emptyList()

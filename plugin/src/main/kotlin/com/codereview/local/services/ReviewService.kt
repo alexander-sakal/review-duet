@@ -138,4 +138,39 @@ class ReviewService(private val projectRoot: Path) {
         saveReviewData(data)
         return isNowReviewed
     }
+
+    fun getReviewedFilesCount(): Int {
+        val data = loadReviewData() ?: return 0
+        return data.reviewedFiles.size
+    }
+
+    /**
+     * Accept all reviewed changes and advance the baseline to current HEAD.
+     * This completes the current review phase and prepares for the next batch of changes.
+     */
+    fun acceptChanges() {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val currentHead = gitService.getCurrentCommitSha() ?: throw IllegalStateException("Cannot get current commit")
+
+        // Move baseline to current HEAD and clear reviewed files
+        val updatedData = data.copy(
+            baseCommit = currentHead,
+            reviewedFiles = mutableSetOf()
+        )
+
+        saveReviewData(updatedData)
+        cachedData = null
+    }
+
+    /**
+     * Check if there are any changes to review (between baseCommit and HEAD)
+     */
+    fun hasChangesToReview(): Boolean {
+        val data = loadReviewData() ?: return false
+        val currentHead = gitService.getCurrentCommitSha() ?: return false
+        if (data.baseCommit == currentHead) return false
+
+        val changedFiles = gitService.getChangedFilePaths(data.baseCommit, currentHead)
+        return changedFiles.isNotEmpty()
+    }
 }

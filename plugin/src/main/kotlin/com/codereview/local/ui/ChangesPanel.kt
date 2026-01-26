@@ -60,14 +60,26 @@ class ChangesPanel(
                     openAllDiffs()
                 }
             })
+            addSeparator()
+            add(object : AnAction("Expand All", "Expand all directories", AllIcons.Actions.Expandall) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    expandAllNodes()
+                }
+            })
+            add(object : AnAction("Collapse All", "Collapse all directories", AllIcons.Actions.Collapseall) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    collapseAllNodes()
+                }
+            })
         }
 
         val toolbar = ActionManager.getInstance().createActionToolbar("ChangesPanel", actionGroup, true)
         toolbar.targetComponent = this
 
         val toolbarPanel = JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.emptyBottom(8)
-            add(toolbar.component, BorderLayout.EAST)
+            border = JBUI.Borders.empty(0, 0, 4, 0)
+            add(toolbar.component, BorderLayout.WEST)
+            add(JSeparator(), BorderLayout.SOUTH)
         }
 
         // Setup file tree
@@ -174,6 +186,14 @@ class ChangesPanel(
         while (row < fileTree.rowCount) {
             fileTree.expandRow(row)
             row++
+        }
+    }
+
+    private fun collapseAllNodes() {
+        var row = fileTree.rowCount - 1
+        while (row >= 0) {
+            fileTree.collapseRow(row)
+            row--
         }
     }
 

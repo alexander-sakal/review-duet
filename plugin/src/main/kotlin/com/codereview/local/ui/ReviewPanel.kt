@@ -101,21 +101,17 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun showActiveReviewPanel() {
         val data = reviewService.loadReviewData() ?: return
 
-        // Header - show base commit and progress with separator below
+        // Header - show base commit and progress
         val shortCommit = data.baseCommit.take(7)
-        val headerPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
-            val infoPanel = JBPanel<JBPanel<*>>().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                border = JBUI.Borders.empty(0, 10, 8, 10)
+        val headerPanel = JBPanel<JBPanel<*>>().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = JBUI.Borders.empty(0, 10, 4, 10)
 
-                add(JBLabel("Reviewing changes since: $shortCommit"))
+            add(JBLabel("Reviewing changes since: $shortCommit"))
 
-                val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
-                val totalCount = data.comments.size
-                add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
-            }
-            add(infoPanel, BorderLayout.CENTER)
-            add(JSeparator(), BorderLayout.SOUTH)
+            val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
+            val totalCount = data.comments.size
+            add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
         }
 
         // Comment list panel
@@ -128,6 +124,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
         // Tabbed pane
         val tabbedPane = JBTabbedPane().apply {
+            putClientProperty("JBTabbedPane.tabAreaInsets", JBUI.insets(0))
+            border = JBUI.Borders.emptyTop(4)
             addTab("Comments", commentsContent)
             addTab("Changes", changesPanel)
             selectedIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
@@ -137,9 +135,13 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val buttonPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
             add(JSeparator(), BorderLayout.NORTH)
             val buttonsContainer = JBPanel<JBPanel<*>>().apply {
-                layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 8)
+                layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0)
+                border = JBUI.Borders.empty(8, 0, 0, 0)
                 add(JButton("Refresh").apply {
                     addActionListener { refresh() }
+                })
+                add(JButton("Accept Changes").apply {
+                    addActionListener { acceptChanges() }
                 })
                 add(JButton("End Review").apply {
                     addActionListener { endReview() }
@@ -187,6 +189,40 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             project,
             "Review started!\n\nReviewing changes since commit ${selectedCommit.shortSha}",
             "Review Initialized"
+        )
+    }
+
+    private fun acceptChanges() {
+        val data = reviewService.loadReviewData() ?: return
+        val currentHead = gitService.getCurrentCommitSha() ?: return
+
+        if (data.baseCommit == currentHead) {
+            com.intellij.openapi.ui.Messages.showInfoMessage(
+                project,
+                "No new changes to accept. Baseline is already at current commit.",
+                "No Changes"
+            )
+            return
+        }
+
+        val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
+            project,
+            "Accept all changes and advance baseline to current commit?\n\n" +
+                "Current baseline: ${data.baseCommit.take(7)}\n" +
+                "New baseline: ${currentHead}\n\n" +
+                "This will clear the reviewed files list.",
+            "Accept Changes",
+            com.intellij.openapi.ui.Messages.getQuestionIcon()
+        )
+        if (result != com.intellij.openapi.ui.Messages.YES) return
+
+        reviewService.acceptChanges()
+        refresh()
+
+        com.intellij.openapi.ui.Messages.showInfoMessage(
+            project,
+            "Changes accepted. Baseline moved to $currentHead",
+            "Changes Accepted"
         )
     }
 

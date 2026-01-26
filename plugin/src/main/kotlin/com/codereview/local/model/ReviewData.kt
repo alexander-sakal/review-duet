@@ -63,6 +63,10 @@ data class ReviewData(
     fun unmarkFileReviewed(filePath: String) {
         reviewedFiles.remove(filePath)
     }
+
+    fun clearReviewedFiles() {
+        reviewedFiles.clear()
+    }
 }
 
 enum class ChangeType(val symbol: String) {

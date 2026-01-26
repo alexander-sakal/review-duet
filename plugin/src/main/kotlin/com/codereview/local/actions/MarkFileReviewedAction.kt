@@ -2,7 +2,6 @@ package com.codereview.local.actions
 
 import com.codereview.local.diff.DiffCommentExtension
 import com.codereview.local.services.ReviewService
-import com.intellij.diff.DiffContext
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -38,7 +37,7 @@ class MarkFileReviewedAction : AnAction() {
 
         val isReviewed = reviewService.isFileReviewed(filePath)
         e.presentation.isEnabledAndVisible = true
-        e.presentation.icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.Actions.CheckOut
+        e.presentation.icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.General.InspectionsEye
         e.presentation.text = if (isReviewed) "Reviewed" else "Mark Reviewed"
         e.presentation.description = if (isReviewed) "File is reviewed - click to unmark" else "Mark this file as reviewed"
     }
