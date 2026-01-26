@@ -10,6 +10,7 @@ class ReviewService(private val projectRoot: Path) {
     private val reviewDir: Path = projectRoot.resolve(".review")
     private val commentsFile: Path = reviewDir.resolve("comments.json")
     private val serializer = ReviewDataSerializer()
+    private val gitService = GitService(projectRoot)
 
     private var cachedData: ReviewData? = null
 
@@ -43,11 +44,14 @@ class ReviewService(private val projectRoot: Path) {
     fun addComment(file: String, line: Int, text: String) {
         val data = loadReviewData() ?: throw IllegalStateException("No active review")
 
+        // Store current HEAD - the commit the user is looking at when adding the comment
+        val currentCommit = gitService.getCurrentCommitSha() ?: "HEAD"
+
         val comment = Comment(
             id = data.getNextCommentId(),
             file = file,
             line = line,
-            commit = data.baseCommit,
+            commit = currentCommit,
             status = CommentStatus.OPEN,
             resolveCommit = null,
             thread = mutableListOf(
