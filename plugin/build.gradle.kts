@@ -15,9 +15,9 @@ repositories {
 }
 
 dependencies {
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.code.gson:gson:2.13.2")
     // kotlinx-coroutines is provided by IntelliJ Platform, no need to add explicitly
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
 
     intellijPlatform {
         phpstorm("2025.1")
