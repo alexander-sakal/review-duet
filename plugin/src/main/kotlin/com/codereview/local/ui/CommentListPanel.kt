@@ -26,6 +26,8 @@ class CommentListPanel(
 
     init {
         comments.forEach { addCommentItem(it) }
+        // Add vertical glue to push items to top
+        contentPanel.add(Box.createVerticalGlue())
         setViewportView(contentPanel)
         border = JBUI.Borders.empty()
     }
@@ -179,6 +181,7 @@ class CommentListPanel(
     fun refresh(newComments: List<Comment>) {
         contentPanel.removeAll()
         newComments.forEach { addCommentItem(it) }
+        contentPanel.add(Box.createVerticalGlue())
         contentPanel.revalidate()
         contentPanel.repaint()
     }
