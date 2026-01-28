@@ -97,11 +97,12 @@ class CommentListPanel(
 
         innerPanel.add(line1, gbc)
 
-        // Line 2: Comment text
+        // Line 2: Comment text (truncated preview)
         comment.firstUserMessage?.let { msg ->
             gbc.gridy++
             gbc.insets = JBUI.insets(4, 4, 0, 0)
-            val line2 = JBLabel(msg).apply {
+            val preview = if (msg.length > 80) msg.take(80) + "..." else msg
+            val line2 = JBLabel(preview).apply {
                 foreground = JBColor.GRAY
                 font = JBFont.regular()
             }
