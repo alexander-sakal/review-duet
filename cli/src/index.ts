@@ -2,9 +2,9 @@
 
 import { ReviewStore } from './store';
 import { listComments } from './commands/list';
-import { replyToComment } from './commands/reply';
 import { markAsFixed } from './commands/fix';
 import { showComment } from './commands/show';
+import { acceptChanges } from './commands/accept';
 import { CommentStatus, isValidStatus } from './types';
 
 export interface ParsedArgs {
@@ -51,21 +51,13 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
       return listComments(store, { status: statusFilter });
     }
 
-    case 'reply': {
-      const id = parseInt(args[0], 10);
-      const message = args[1];
-      if (isNaN(id)) throw new Error('Invalid comment ID');
-      if (!message) throw new Error('Message required');
-      replyToComment(store, id, message);
-      return `Replied to comment #${id}`;
-    }
-
     case 'fix': {
       const id = parseInt(args[0], 10);
       const commit = options.commit;
+      const message = options.message;
       if (isNaN(id)) throw new Error('Invalid comment ID');
       if (!commit) throw new Error('--commit required');
-      markAsFixed(store, id, commit);
+      markAsFixed(store, id, commit, message);
       return `Marked comment #${id} as fixed (${commit})`;
     }
 
@@ -75,17 +67,21 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
       return showComment(store, id);
     }
 
+    case 'accept': {
+      return acceptChanges(store, cwd);
+    }
+
     case 'help':
     default:
       return `review-duet CLI - Code review helper for Claude Code
 
 Usage:
-  review-duet list [--status=<status>]    List comments
-  review-duet reply <id> "<message>"      Reply to a comment
-  review-duet fix <id> --commit <sha>     Mark as fixed
-  review-duet show <id>                   Show comment details
+  review-duet list [--status=<status>]              List comments
+  review-duet fix <id> --commit <sha> [--message]   Mark as fixed
+  review-duet show <id>                             Show comment details
+  review-duet accept                                Accept changes, move baseline to HEAD
 
-Statuses: open, pending-user, pending-agent, fixed, resolved, wontfix`;
+Statuses: open, fixed, resolved, wontfix`;
   }
 }
 

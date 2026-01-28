@@ -58,8 +58,6 @@ class ReviewGutterProvider : LineMarkerProvider {
     private class CommentIcon(private val status: CommentStatus) : Icon {
         private val color: Color = when (status) {
             CommentStatus.OPEN -> JBColor.YELLOW
-            CommentStatus.PENDING_USER -> JBColor.BLUE
-            CommentStatus.PENDING_AGENT -> JBColor.ORANGE
             CommentStatus.FIXED -> JBColor.GREEN
             CommentStatus.RESOLVED -> JBColor.GRAY
             CommentStatus.WONTFIX -> JBColor.GRAY

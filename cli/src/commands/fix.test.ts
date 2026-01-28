@@ -69,4 +69,22 @@ describe('fix command', () => {
     const store = new ReviewStore(tempDir);
     expect(() => markAsFixed(store, 999, 'abc')).toThrow('Comment #999 not found');
   });
+
+  it('should include optional message in thread entry', () => {
+    const data = {
+      version: 1,
+      baseCommit: 'abc1234',
+      comments: [
+        { id: 1, file: 'a.ts', line: 1, commit: 'abc1234', status: 'open', resolveCommit: null, thread: [{ author: 'user', text: 'Fix this', at: '2024-01-23T10:00:00Z' }] }
+      ]
+    };
+    fs.writeFileSync(reviewPath, JSON.stringify(data));
+
+    const store = new ReviewStore(tempDir);
+    markAsFixed(store, 1, 'abc1234', 'Refactored the function to handle edge cases');
+
+    const updated = JSON.parse(fs.readFileSync(reviewPath, 'utf-8'));
+    expect(updated.comments[0].thread[1].text).toContain('Refactored the function to handle edge cases');
+    expect(updated.comments[0].thread[1].text).toContain('abc1234');
+  });
 });

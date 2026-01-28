@@ -19,22 +19,6 @@ export function formatComment(comment: Comment): string {
     lines.push(`   "${firstUserMsg.text}"`);
   }
 
-  // For pending-user, show the last agent message
-  if (comment.status === 'pending-user') {
-    const lastAgentMsg = [...comment.thread].reverse().find(t => t.author === 'agent');
-    if (lastAgentMsg) {
-      lines.push(`   └─ Claude asked: "${lastAgentMsg.text}"`);
-    }
-  }
-
-  // For pending-agent, show the last user reply
-  if (comment.status === 'pending-agent') {
-    const lastUserMsg = [...comment.thread].reverse().find(t => t.author === 'user');
-    if (lastUserMsg && comment.thread.length > 1) {
-      lines.push(`   └─ You answered: "${lastUserMsg.text}"`);
-    }
-  }
-
   // For fixed, show the commit
   if (comment.status === 'fixed' && comment.resolveCommit) {
     lines.push(`   └─ Fixed in ${comment.resolveCommit}`);

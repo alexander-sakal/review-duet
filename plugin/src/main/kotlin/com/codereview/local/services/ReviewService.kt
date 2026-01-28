@@ -87,27 +87,6 @@ class ReviewService(private val projectRoot: Path) {
         }
     }
 
-    fun addReply(commentId: Int, text: String, asAgent: Boolean = false) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
-        val comment = data.getComment(commentId) ?: throw IllegalArgumentException("Comment not found")
-
-        comment.thread.add(
-            ThreadEntry(
-                author = if (asAgent) "agent" else "user",
-                text = text,
-                at = Instant.now().toString()
-            )
-        )
-
-        // Update status based on who replied
-        if (asAgent && comment.status == CommentStatus.OPEN) {
-            comment.status = CommentStatus.PENDING_USER
-        } else if (!asAgent && comment.status == CommentStatus.PENDING_USER) {
-            comment.status = CommentStatus.PENDING_AGENT
-        }
-
-        saveReviewData(data)
-    }
 
     fun isFileReviewed(filePath: String): Boolean {
         val data = loadReviewData() ?: return false

@@ -1,15 +1,11 @@
 export type CommentStatus =
   | 'open'
-  | 'pending-user'
-  | 'pending-agent'
   | 'fixed'
   | 'resolved'
   | 'wontfix';
 
 const VALID_STATUSES: CommentStatus[] = [
   'open',
-  'pending-user',
-  'pending-agent',
   'fixed',
   'resolved',
   'wontfix'
@@ -41,4 +37,5 @@ export interface ReviewData {
   version: number;
   baseCommit: string;
   comments: Comment[];
+  reviewedFiles?: string[];
 }

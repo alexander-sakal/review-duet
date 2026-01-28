@@ -39,25 +39,6 @@ describe('list command', () => {
       expect(output).toContain('Fix this bug');
     });
 
-    it('should show last agent reply for pending-user status', () => {
-      const comment = {
-        id: 2,
-        file: 'src/Example.php',
-        line: 87,
-        commit: 'abc1234',
-        status: 'pending-user' as const,
-        resolveCommit: null,
-        thread: [
-          { author: 'user' as const, text: 'Handle error', at: '2024-01-23T10:00:00Z' },
-          { author: 'agent' as const, text: 'Throw or return null?', at: '2024-01-23T10:30:00Z' }
-        ]
-      };
-
-      const output = formatComment(comment);
-
-      expect(output).toContain('[pending-user]');
-      expect(output).toContain('Throw or return null?');
-    });
   });
 
   describe('listComments', () => {

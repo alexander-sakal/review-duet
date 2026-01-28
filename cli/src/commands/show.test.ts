@@ -29,7 +29,7 @@ describe('show command', () => {
           file: 'src/Example.php',
           line: 42,
           commit: 'abc1234',
-          status: 'pending-user',
+          status: 'open',
           resolveCommit: null,
           thread: [
             { author: 'user', text: 'Fix this bug', at: '2024-01-23T10:00:00Z' },
@@ -45,7 +45,7 @@ describe('show command', () => {
 
     expect(output).toContain('Comment #1');
     expect(output).toContain('src/Example.php:42');
-    expect(output).toContain('pending-user');
+    expect(output).toContain('open');
     expect(output).toContain('Fix this bug');
     expect(output).toContain('What approach?');
   });

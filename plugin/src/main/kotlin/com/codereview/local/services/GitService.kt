@@ -25,6 +25,11 @@ class GitService(private val projectRoot: Path) {
         return result?.trim()
     }
 
+    fun getParentCommitSha(commitSha: String): String? {
+        val result = runGitCommandWithOutput("rev-parse", "$commitSha^")
+        return result?.trim()
+    }
+
     fun getFileAtRef(ref: String, filePath: String): String? {
         return runGitCommandWithOutput("show", "$ref:$filePath")
     }

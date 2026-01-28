@@ -30,12 +30,6 @@ describe('CLI', () => {
       expect(result.options.status).toBe('open');
     });
 
-    it('should parse reply command', () => {
-      const result = parseArgs(['reply', '1', 'My message']);
-      expect(result.command).toBe('reply');
-      expect(result.args).toEqual(['1', 'My message']);
-    });
-
     it('should parse fix command', () => {
       const result = parseArgs(['fix', '1', '--commit', 'abc123']);
       expect(result.command).toBe('fix');

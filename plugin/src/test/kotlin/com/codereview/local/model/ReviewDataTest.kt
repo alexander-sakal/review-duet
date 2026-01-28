@@ -8,14 +8,14 @@ class ReviewDataTest {
     @Test
     fun `should parse valid status`() {
         assertEquals(CommentStatus.OPEN, CommentStatus.fromString("open"))
-        assertEquals(CommentStatus.PENDING_USER, CommentStatus.fromString("pending-user"))
         assertEquals(CommentStatus.FIXED, CommentStatus.fromString("fixed"))
+        assertEquals(CommentStatus.RESOLVED, CommentStatus.fromString("resolved"))
     }
 
     @Test
     fun `should serialize status to json value`() {
         assertEquals("open", CommentStatus.OPEN.jsonValue)
-        assertEquals("pending-user", CommentStatus.PENDING_USER.jsonValue)
+        assertEquals("fixed", CommentStatus.FIXED.jsonValue)
     }
 
     @Test

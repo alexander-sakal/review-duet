@@ -5,8 +5,6 @@ describe('CommentStatus', () => {
   it('should have all valid statuses', () => {
     const statuses: CommentStatus[] = [
       'open',
-      'pending-user',
-      'pending-agent',
       'fixed',
       'resolved',
       'wontfix'

@@ -2,8 +2,6 @@ package com.codereview.local.model
 
 enum class CommentStatus(val jsonValue: String) {
     OPEN("open"),
-    PENDING_USER("pending-user"),
-    PENDING_AGENT("pending-agent"),
     FIXED("fixed"),
     RESOLVED("resolved"),
     WONTFIX("wontfix");

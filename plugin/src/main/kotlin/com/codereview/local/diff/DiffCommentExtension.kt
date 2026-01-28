@@ -342,10 +342,9 @@ class DiffCommentExtension : DiffExtension() {
             border = JBUI.Borders.emptyTop(8)
         }
 
-        // Actions based on current status (per design doc)
-        // Note: Reopen happens automatically on follow-up reply
+        // Actions based on current status
         when (comment.status) {
-            CommentStatus.OPEN, CommentStatus.PENDING_USER, CommentStatus.PENDING_AGENT -> {
+            CommentStatus.OPEN -> {
                 // User can resolve directly or mark as won't fix
                 bottomActionsPanel.add(ActionLink("Resolve") {
                     ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
@@ -357,14 +356,14 @@ class DiffCommentExtension : DiffExtension() {
                 }.apply { isFocusPainted = false })
             }
             CommentStatus.FIXED -> {
-                // User verifies the fix - can resolve or reply to reopen
+                // User verifies the fix - can resolve
                 bottomActionsPanel.add(ActionLink("Resolve") {
                     ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
                     refreshCommentInlays(editor, filePath, basePath, commentInlays)
                 }.apply { isFocusPainted = false })
             }
             CommentStatus.RESOLVED, CommentStatus.WONTFIX -> {
-                // No actions - reply to reopen
+                // No actions
             }
         }
 
@@ -512,8 +511,6 @@ class DiffCommentExtension : DiffExtension() {
     private fun getStatusColor(status: CommentStatus): Color {
         return when (status) {
             CommentStatus.OPEN -> Color(255, 193, 7)
-            CommentStatus.PENDING_USER -> Color(33, 150, 243)
-            CommentStatus.PENDING_AGENT -> Color(255, 152, 0)
             CommentStatus.FIXED -> Color(76, 175, 80)
             CommentStatus.RESOLVED -> Color(158, 158, 158)
             CommentStatus.WONTFIX -> Color(158, 158, 158)

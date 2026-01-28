@@ -64,7 +64,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 horizontalAlignment = SwingConstants.CENTER
             }
 
-            val selectLabel = JBLabel("Select baseline commit:")
+            val selectLabel = JBLabel("Review changes starting from:")
 
             val commits = gitService.getRecentCommits(25)
             commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
@@ -140,9 +140,6 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 add(JButton("Refresh").apply {
                     addActionListener { refresh() }
                 })
-                add(JButton("Accept Changes").apply {
-                    addActionListener { acceptChanges() }
-                })
                 add(JButton("End Review").apply {
                     addActionListener { endReview() }
                 })
@@ -158,10 +155,6 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun showCommentDetails(comment: com.codereview.local.model.Comment) {
         val popup = CommentPopup(
             comment = comment,
-            onReply = { text ->
-                reviewService.addReply(comment.id, text)
-                refresh()
-            },
             onStatusChange = { status ->
                 reviewService.updateCommentStatus(comment.id, status)
                 refresh()
@@ -181,49 +174,20 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             return
         }
 
-        // Initialize review with the selected commit SHA
-        reviewService.initializeReview(selectedCommit.sha)
-        refresh()
-
-        com.intellij.openapi.ui.Messages.showInfoMessage(
-            project,
-            "Review started!\n\nReviewing changes since commit ${selectedCommit.shortSha}",
-            "Review Initialized"
-        )
-    }
-
-    private fun acceptChanges() {
-        val data = reviewService.loadReviewData() ?: return
-        val currentHead = gitService.getCurrentCommitSha() ?: return
-
-        if (data.baseCommit == currentHead) {
-            com.intellij.openapi.ui.Messages.showInfoMessage(
+        // Get parent of selected commit as the baseline
+        // This way "review from commit X" means X is included in the review
+        val parentSha = gitService.getParentCommitSha(selectedCommit.sha)
+        if (parentSha == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
                 project,
-                "No new changes to accept. Baseline is already at current commit.",
-                "No Changes"
+                "Cannot start review from the initial commit (no parent).",
+                "Invalid Selection"
             )
             return
         }
 
-        val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
-            project,
-            "Accept all changes and advance baseline to current commit?\n\n" +
-                "Current baseline: ${data.baseCommit.take(7)}\n" +
-                "New baseline: ${currentHead}\n\n" +
-                "This will clear the reviewed files list.",
-            "Accept Changes",
-            com.intellij.openapi.ui.Messages.getQuestionIcon()
-        )
-        if (result != com.intellij.openapi.ui.Messages.YES) return
-
-        reviewService.acceptChanges()
+        reviewService.initializeReview(parentSha)
         refresh()
-
-        com.intellij.openapi.ui.Messages.showInfoMessage(
-            project,
-            "Changes accepted. Baseline moved to $currentHead",
-            "Changes Accepted"
-        )
     }
 
     private fun endReview() {
