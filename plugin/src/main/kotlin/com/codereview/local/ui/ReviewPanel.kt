@@ -116,7 +116,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
         // Comment list panel
         val commentsContent = JBPanel<JBPanel<*>>(BorderLayout()).apply {
-            val commentList = CommentListPanel(data.comments) { comment ->
+            val commentList = CommentListPanel(project, data.comments) { comment ->
                 showCommentDetails(comment)
             }
             add(commentList, BorderLayout.CENTER)
