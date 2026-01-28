@@ -113,7 +113,7 @@ class CommentListPanel(
                 foreground = JBColor.GRAY
             })
             actionsLine.add(Box.createHorizontalStrut(8))
-            actionsLine.add(JBLabel("Fixed in:").apply {
+            actionsLine.add(JBLabel("Fixed in: ").apply {
                 foreground = JBColor.GRAY
                 font = JBFont.small()
             })
@@ -177,8 +177,6 @@ class CommentListPanel(
     private fun getStatusColor(status: CommentStatus): Color {
         return when (status) {
             CommentStatus.OPEN -> Color(255, 193, 7)
-            CommentStatus.PENDING_USER -> Color(33, 150, 243)
-            CommentStatus.PENDING_AGENT -> Color(255, 152, 0)
             CommentStatus.FIXED -> Color(76, 175, 80)
             CommentStatus.RESOLVED -> Color(158, 158, 158)
             CommentStatus.WONTFIX -> Color(158, 158, 158)
