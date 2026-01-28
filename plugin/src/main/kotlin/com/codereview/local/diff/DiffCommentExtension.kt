@@ -161,7 +161,12 @@ class DiffCommentExtension : DiffExtension() {
         commentInlays.clear()
 
         val editorImpl = editor as? EditorImpl ?: return
-        val fileComments = reviewData.comments.filter { it.file == filePath }
+
+        // Only show open comments in diff view - these are freshly created, position is correct
+        // Once Claude processes comments, they may be at wrong positions - manage via Comments panel
+        val fileComments = reviewData.comments.filter {
+            it.file == filePath && it.status == CommentStatus.OPEN
+        }
 
         for (comment in fileComments) {
             val line = comment.line - 1
@@ -317,7 +322,7 @@ class DiffCommentExtension : DiffExtension() {
         headerPanel.add(actionsPanel, BorderLayout.EAST)
 
         contentPanel.add(headerPanel)
-        contentPanel.add(Box.createVerticalStrut(verticalGap))
+        contentPanel.add(Box.createVerticalStrut(8))
 
         for (entry in comment.thread) {
             val textPane = JTextArea(entry.text).apply {
@@ -327,35 +332,40 @@ class DiffCommentExtension : DiffExtension() {
                 wrapStyleWord = true
                 foreground = fgColor
                 font = UIUtil.getLabelFont()
-                border = JBUI.Borders.emptyBottom(verticalGap)
+                border = JBUI.Borders.empty()
             }
             contentPanel.add(textPane)
         }
 
-        val bottomActionsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 12, 0)).apply {
+        val bottomActionsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
             isOpaque = false
-            border = JBUI.Borders.emptyTop(verticalGap)
+            border = JBUI.Borders.emptyTop(8)
         }
 
-        if (comment.status != CommentStatus.RESOLVED) {
-            bottomActionsPanel.add(ActionLink("Resolve") {
-                ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
-                refreshCommentInlays(editor, filePath, basePath, commentInlays)
-            }.apply { isFocusPainted = false })
-        }
-
-        if (comment.status != CommentStatus.FIXED) {
-            bottomActionsPanel.add(ActionLink("Fixed") {
-                ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.FIXED)
-                refreshCommentInlays(editor, filePath, basePath, commentInlays)
-            }.apply { isFocusPainted = false })
-        }
-
-        if (comment.status == CommentStatus.RESOLVED || comment.status == CommentStatus.FIXED || comment.status == CommentStatus.WONTFIX) {
-            bottomActionsPanel.add(ActionLink("Reopen") {
-                ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.OPEN)
-                refreshCommentInlays(editor, filePath, basePath, commentInlays)
-            }.apply { isFocusPainted = false })
+        // Actions based on current status (per design doc)
+        // Note: Reopen happens automatically on follow-up reply
+        when (comment.status) {
+            CommentStatus.OPEN, CommentStatus.PENDING_USER, CommentStatus.PENDING_AGENT -> {
+                // User can resolve directly or mark as won't fix
+                bottomActionsPanel.add(ActionLink("Resolve") {
+                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
+                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                }.apply { isFocusPainted = false })
+                bottomActionsPanel.add(ActionLink("Won't Fix") {
+                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.WONTFIX)
+                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                }.apply { isFocusPainted = false })
+            }
+            CommentStatus.FIXED -> {
+                // User verifies the fix - can resolve or reply to reopen
+                bottomActionsPanel.add(ActionLink("Resolve") {
+                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
+                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                }.apply { isFocusPainted = false })
+            }
+            CommentStatus.RESOLVED, CommentStatus.WONTFIX -> {
+                // No actions - reply to reopen
+            }
         }
 
         if (bottomActionsPanel.componentCount > 0) {
@@ -472,19 +482,29 @@ class DiffCommentExtension : DiffExtension() {
     }
 
     private fun createTagLabel(text: String, color: Color): JComponent {
-        return JBLabel(text).apply {
+        val bgColor = JBColor(
+            Color(color.red, color.green, color.blue, 30),
+            Color(color.red, color.green, color.blue, 50)
+        )
+        val label = JBLabel(text).apply {
             font = JBFont.small()
             foreground = color
-            border = JBUI.Borders.empty(2, 6)
-        }.let { label ->
-            JPanel(BorderLayout()).apply {
-                isOpaque = true
-                background = JBColor(
-                    Color(color.red, color.green, color.blue, 30),
-                    Color(color.red, color.green, color.blue, 50)
-                )
-                border = JBUI.Borders.empty()
+            isOpaque = false
+        }
+        return object : JPanel(BorderLayout()) {
+            init {
+                isOpaque = false
+                border = JBUI.Borders.empty(2, 8)
                 add(label, BorderLayout.CENTER)
+            }
+
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = bgColor
+                g2.fillRoundRect(0, 0, width, height, 10, 10)
+                g2.dispose()
+                super.paintComponent(g)
             }
         }
     }
