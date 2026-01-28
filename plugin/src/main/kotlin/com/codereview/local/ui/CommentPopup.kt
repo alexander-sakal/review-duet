@@ -185,19 +185,19 @@ class CommentPopup(
         }
     }
 
+    private val resolveAction = object : DialogWrapperAction("Resolve") {
+        override fun doAction(e: java.awt.event.ActionEvent?) {
+            onStatusChange(CommentStatus.RESOLVED)
+            close(OK_EXIT_CODE)
+        }
+    }
+
     override fun createActions(): Array<Action> {
         // Show Resolve button only for non-resolved comments
         return if (comment.status != CommentStatus.RESOLVED && comment.status != CommentStatus.WONTFIX) {
             arrayOf(resolveAction, okAction)
         } else {
             arrayOf(okAction)
-        }
-    }
-
-    private val resolveAction = object : DialogWrapperAction("Resolve") {
-        override fun doAction(e: java.awt.event.ActionEvent?) {
-            onStatusChange(CommentStatus.RESOLVED)
-            close(OK_EXIT_CODE)
         }
     }
 }
