@@ -28,14 +28,16 @@ class CommentPopup(
     }
 
     override fun createCenterPanel(): JComponent {
-        val panel = JPanel(BorderLayout()).apply {
-            preferredSize = Dimension(550, 450)
+        val panel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(4)
         }
 
         // Header: file:line + status tag
         val headerPanel = JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.empty(0, 0, 12, 0)
+            alignmentX = Component.LEFT_ALIGNMENT
+            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
+            border = JBUI.Borders.empty(0, 0, 8, 0)
 
             add(JBLabel("${comment.file}:${comment.line}").apply {
                 font = JBFont.regular().deriveFont(Font.BOLD)
@@ -43,39 +45,30 @@ class CommentPopup(
 
             add(createStatusTag(), BorderLayout.EAST)
         }
+        panel.add(headerPanel)
+        panel.add(createSeparator())
 
         // Thread messages
-        val threadPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            background = UIUtil.getPanelBackground()
-        }
-
-        for ((index, entry) in comment.thread.withIndex()) {
-            threadPanel.add(createThreadEntryPanel(entry))
-            if (index < comment.thread.size - 1) {
-                threadPanel.add(createSeparator())
-            }
-        }
-
-        // Add glue to push messages to top
-        threadPanel.add(Box.createVerticalGlue())
-
-        val threadScroll = JBScrollPane(threadPanel).apply {
-            border = JBUI.Borders.customLine(JBColor.border(), 1)
-            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
-            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        for (entry in comment.thread) {
+            panel.add(createThreadEntryPanel(entry))
+            panel.add(createSeparator())
         }
 
         // Action buttons at bottom
         val actionsPanel = createActionsPanel()
-
-        panel.add(headerPanel, BorderLayout.NORTH)
-        panel.add(threadScroll, BorderLayout.CENTER)
         if (actionsPanel.componentCount > 0) {
-            panel.add(actionsPanel, BorderLayout.SOUTH)
+            panel.add(actionsPanel)
         }
 
-        return panel
+        // Wrap in scroll pane for long threads
+        val scrollPane = JBScrollPane(panel).apply {
+            border = JBUI.Borders.empty()
+            preferredSize = Dimension(500, minOf(400, panel.preferredSize.height + 50))
+            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        }
+
+        return scrollPane
     }
 
     private fun createStatusTag(): JComponent {
@@ -106,7 +99,8 @@ class CommentPopup(
     private fun createThreadEntryPanel(entry: ThreadEntry): JPanel {
         return JPanel(BorderLayout()).apply {
             isOpaque = false
-            border = JBUI.Borders.empty(12)
+            alignmentX = Component.LEFT_ALIGNMENT
+            border = JBUI.Borders.empty(10, 0)
 
             // Header: author + timestamp
             val authorColor = if (entry.isUserComment) {
@@ -149,13 +143,15 @@ class CommentPopup(
 
     private fun createSeparator(): JComponent {
         return JSeparator().apply {
+            alignmentX = Component.LEFT_ALIGNMENT
             maximumSize = Dimension(Int.MAX_VALUE, 1)
         }
     }
 
     private fun createActionsPanel(): JPanel {
         return JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
-            border = JBUI.Borders.emptyTop(12)
+            alignmentX = Component.LEFT_ALIGNMENT
+            border = JBUI.Borders.empty(8, 0, 0, 0)
 
             when (comment.status) {
                 CommentStatus.FIXED -> {
