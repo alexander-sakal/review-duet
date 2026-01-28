@@ -41,10 +41,21 @@ class CommentListPanel(
     }
 
     private fun createCommentItem(comment: Comment): JPanel {
-        val panel = JPanel(GridBagLayout()).apply {
+        val innerPanel = JPanel(GridBagLayout()).apply {
             border = JBUI.Borders.empty(8, 12)
             isOpaque = true
             background = UIUtil.getListBackground()
+        }
+
+        // Wrapper to constrain height
+        val panel = object : JPanel(BorderLayout()) {
+            override fun getMaximumSize(): Dimension {
+                val pref = preferredSize
+                return Dimension(Int.MAX_VALUE, pref.height)
+            }
+        }.apply {
+            isOpaque = false
+            add(innerPanel, BorderLayout.CENTER)
         }
 
         val gbc = GridBagConstraints().apply {
@@ -84,7 +95,7 @@ class CommentListPanel(
         line1.add(leftPart, BorderLayout.WEST)
         line1.add(viewLink, BorderLayout.EAST)
 
-        panel.add(line1, gbc)
+        innerPanel.add(line1, gbc)
 
         // Line 2: Comment text
         comment.firstUserMessage?.let { msg ->
@@ -94,7 +105,7 @@ class CommentListPanel(
                 foreground = JBColor.GRAY
                 font = JBFont.regular()
             }
-            panel.add(line2, gbc)
+            innerPanel.add(line2, gbc)
         }
 
         // Line 3: Commit link (if fixed)
@@ -114,7 +125,7 @@ class CommentListPanel(
                 showCommitInLog(project, comment.resolveCommit!!)
             })
 
-            panel.add(line3, gbc)
+            innerPanel.add(line3, gbc)
         }
 
         return panel
