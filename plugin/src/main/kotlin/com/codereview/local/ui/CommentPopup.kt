@@ -153,43 +153,14 @@ class CommentPopup(
             alignmentX = Component.LEFT_ALIGNMENT
             border = JBUI.Borders.empty(8, 0, 0, 0)
 
-            when (comment.status) {
-                CommentStatus.FIXED -> {
-                    add(JButton("Resolve").apply {
-                        addActionListener {
-                            onStatusChange(CommentStatus.RESOLVED)
-                            close(OK_EXIT_CODE)
-                        }
-                    })
-                    add(JButton("Reopen").apply {
-                        addActionListener {
-                            onStatusChange(CommentStatus.OPEN)
-                            close(OK_EXIT_CODE)
-                        }
-                    })
-                }
-                CommentStatus.OPEN -> {
-                    add(JButton("Resolve").apply {
-                        addActionListener {
-                            onStatusChange(CommentStatus.RESOLVED)
-                            close(OK_EXIT_CODE)
-                        }
-                    })
-                    add(JButton("Won't Fix").apply {
-                        addActionListener {
-                            onStatusChange(CommentStatus.WONTFIX)
-                            close(OK_EXIT_CODE)
-                        }
-                    })
-                }
-                CommentStatus.RESOLVED, CommentStatus.WONTFIX -> {
-                    add(JButton("Reopen").apply {
-                        addActionListener {
-                            onStatusChange(CommentStatus.OPEN)
-                            close(OK_EXIT_CODE)
-                        }
-                    })
-                }
+            // Won't Fix only for open comments
+            if (comment.status == CommentStatus.OPEN) {
+                add(JButton("Won't Fix").apply {
+                    addActionListener {
+                        onStatusChange(CommentStatus.WONTFIX)
+                        close(OK_EXIT_CODE)
+                    }
+                })
             }
         }
     }
@@ -215,6 +186,18 @@ class CommentPopup(
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(okAction)
+        // Show Resolve button only for non-resolved comments
+        return if (comment.status != CommentStatus.RESOLVED && comment.status != CommentStatus.WONTFIX) {
+            arrayOf(resolveAction, okAction)
+        } else {
+            arrayOf(okAction)
+        }
+    }
+
+    private val resolveAction = object : DialogWrapperAction("Resolve") {
+        override fun doAction(e: java.awt.event.ActionEvent?) {
+            onStatusChange(CommentStatus.RESOLVED)
+            close(OK_EXIT_CODE)
+        }
     }
 }
