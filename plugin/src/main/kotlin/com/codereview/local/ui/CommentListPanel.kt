@@ -39,19 +39,23 @@ class CommentListPanel(
     }
 
     private fun createCommentItem(comment: Comment): JPanel {
-        val panel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        val panel = JPanel(GridBagLayout()).apply {
             border = JBUI.Borders.empty(8, 12)
             isOpaque = true
             background = UIUtil.getListBackground()
-            alignmentX = Component.LEFT_ALIGNMENT
+        }
+
+        val gbc = GridBagConstraints().apply {
+            gridx = 0
+            gridy = 0
+            weightx = 1.0
+            fill = GridBagConstraints.HORIZONTAL
+            anchor = GridBagConstraints.WEST
         }
 
         // Line 1: #ID [status] path:line + View link
         val line1 = JPanel(BorderLayout()).apply {
             isOpaque = false
-            alignmentX = Component.LEFT_ALIGNMENT
-            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
         }
 
         val leftPart = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
@@ -78,25 +82,25 @@ class CommentListPanel(
         line1.add(leftPart, BorderLayout.WEST)
         line1.add(viewLink, BorderLayout.EAST)
 
-        panel.add(line1)
+        panel.add(line1, gbc)
 
         // Line 2: Comment text
         comment.firstUserMessage?.let { msg ->
+            gbc.gridy++
+            gbc.insets = JBUI.insets(4, 4, 0, 0)
             val line2 = JBLabel(msg).apply {
                 foreground = JBColor.GRAY
                 font = JBFont.regular()
-                border = JBUI.Borders.emptyLeft(4)
-                alignmentX = Component.LEFT_ALIGNMENT
             }
-            panel.add(Box.createVerticalStrut(4))
-            panel.add(line2)
+            panel.add(line2, gbc)
         }
 
         // Line 3: Commit link (if fixed)
         if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
+            gbc.gridy++
+            gbc.insets = JBUI.insets(4, 0, 0, 0)
             val line3 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
                 isOpaque = false
-                alignmentX = Component.LEFT_ALIGNMENT
             }
 
             line3.add(JBLabel("Fixed in:").apply {
@@ -108,8 +112,7 @@ class CommentListPanel(
                 showCommitInLog(project, comment.resolveCommit!!)
             })
 
-            panel.add(Box.createVerticalStrut(4))
-            panel.add(line3)
+            panel.add(line3, gbc)
         }
 
         return panel
