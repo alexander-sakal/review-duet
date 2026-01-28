@@ -3,7 +3,6 @@ package com.codereview.local.ui
 import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -119,7 +118,7 @@ class CommentListPanel(
                 font = JBFont.small()
             })
             actionsLine.add(createLink(comment.resolveCommit!!) {
-                showCommitInLog(project, comment.resolveCommit!!)
+                openCommitDiff(project, comment.resolveCommit!!, comment.file)
             })
         }
 
@@ -195,28 +194,8 @@ class CommentListPanel(
     }
 
     companion object {
-        fun showCommitInLog(project: Project, commitSha: String) {
-            // Copy commit SHA to clipboard
-            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-            clipboard.setContents(java.awt.datatransfer.StringSelection(commitSha), null)
-
-            // Open Git tool window
-            val gitWindow = ToolWindowManager.getInstance(project).getToolWindow("Git")
-            if (gitWindow != null) {
-                gitWindow.show {
-                    com.intellij.openapi.ui.Messages.showInfoMessage(
-                        project,
-                        "Commit SHA copied: $commitSha\n\nUse Ctrl+F in Git log to find it.",
-                        "Find Commit"
-                    )
-                }
-            } else {
-                com.intellij.openapi.ui.Messages.showInfoMessage(
-                    project,
-                    "Commit SHA copied: $commitSha\n\nOpen Git log and use Ctrl+F to find it.",
-                    "Find Commit"
-                )
-            }
+        fun openCommitDiff(project: Project, commitSha: String, filePath: String? = null) {
+            ChangesPanel.openDiffForCommit(project, commitSha, filePath)
         }
     }
 }

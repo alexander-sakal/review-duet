@@ -41,6 +41,66 @@ class ChangesPanel(
     private val gitService: GitService
 ) : JPanel(BorderLayout()) {
 
+    companion object {
+        /**
+         * Open diff view showing changes made in a specific commit
+         */
+        fun openDiffForCommit(project: Project, commitSha: String, filePath: String? = null) {
+            val basePath = Path.of(project.basePath ?: return)
+            val gitService = GitService(basePath)
+
+            // Get files changed in this commit
+            val changedFiles = gitService.getChangedFiles("$commitSha^", commitSha)
+            if (changedFiles.isEmpty()) return
+
+            // If filePath specified, start with that file
+            val startIndex = if (filePath != null) {
+                changedFiles.indexOfFirst { it.path == filePath }.coerceAtLeast(0)
+            } else 0
+
+            val shortRef = commitSha.take(7)
+            val producers = changedFiles.map { file ->
+                object : DiffRequestProducer {
+                    override fun getName(): String = file.path
+
+                    override fun process(context: UserDataHolder, indicator: ProgressIndicator): DiffRequest {
+                        val fromContent = when (file.changeType) {
+                            ChangeType.ADDED -> ""
+                            else -> gitService.getFileAtRef("$commitSha^", file.path) ?: ""
+                        }
+
+                        val toContent = when (file.changeType) {
+                            ChangeType.DELETED -> ""
+                            else -> gitService.getFileAtRef(commitSha, file.path) ?: ""
+                        }
+
+                        val fileName = file.path.substringAfterLast('/')
+                        val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+
+                        val contentFactory = DiffContentFactory.getInstance()
+                        return SimpleDiffRequest(
+                            "${file.path} (Commit $shortRef)",
+                            contentFactory.create(project, fromContent, fileType),
+                            contentFactory.create(project, toContent, fileType),
+                            "$shortRef^",
+                            shortRef
+                        )
+                    }
+                }
+            }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            val chain = object : UserDataHolderBase(), DiffRequestChain {
+                private var currentIndex = startIndex
+                override fun getRequests(): List<DiffRequestProducer> = producers
+                override fun getIndex(): Int = currentIndex
+                override fun setIndex(index: Int) { currentIndex = index }
+            }
+
+            DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+        }
+    }
+
     private val basePath: Path by lazy {
         Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
     }
