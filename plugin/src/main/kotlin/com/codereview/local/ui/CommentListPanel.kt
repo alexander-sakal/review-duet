@@ -99,8 +99,8 @@ class CommentListPanel(
 
         // Line 3: Actions (View + Fixed in commit if applicable)
         gbc.gridy++
-        gbc.insets = JBUI.insets(4, 0, 0, 0)
-        val actionsLine = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+        gbc.insets = JBUI.insets(4, 4, 0, 0)
+        val actionsLine = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
             isOpaque = false
         }
 
@@ -109,9 +109,11 @@ class CommentListPanel(
         })
 
         if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
+            actionsLine.add(Box.createHorizontalStrut(8))
             actionsLine.add(JBLabel("·").apply {
                 foreground = JBColor.GRAY
             })
+            actionsLine.add(Box.createHorizontalStrut(8))
             actionsLine.add(JBLabel("Fixed in:").apply {
                 foreground = JBColor.GRAY
                 font = JBFont.small()
@@ -194,16 +196,24 @@ class CommentListPanel(
 
     companion object {
         fun showCommitInLog(project: Project, commitSha: String) {
-            // Open the Git tool window and let user find the commit
-            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Git")
-            toolWindow?.activate {
-                // Copy commit SHA to clipboard for easy search
-                val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                clipboard.setContents(java.awt.datatransfer.StringSelection(commitSha), null)
+            // Copy commit SHA to clipboard
+            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            clipboard.setContents(java.awt.datatransfer.StringSelection(commitSha), null)
 
+            // Open Git tool window
+            val gitWindow = ToolWindowManager.getInstance(project).getToolWindow("Git")
+            if (gitWindow != null) {
+                gitWindow.show {
+                    com.intellij.openapi.ui.Messages.showInfoMessage(
+                        project,
+                        "Commit SHA copied: $commitSha\n\nUse Ctrl+F in Git log to find it.",
+                        "Find Commit"
+                    )
+                }
+            } else {
                 com.intellij.openapi.ui.Messages.showInfoMessage(
                     project,
-                    "Commit SHA copied to clipboard: $commitSha\n\nUse Ctrl+F in the Git log to find it.",
+                    "Commit SHA copied: $commitSha\n\nOpen Git log and use Ctrl+F to find it.",
                     "Find Commit"
                 )
             }
