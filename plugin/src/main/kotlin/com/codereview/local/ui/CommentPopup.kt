@@ -21,6 +21,13 @@ class CommentPopup(
     private val onStatusChange: (CommentStatus) -> Unit
 ) : DialogWrapper(true) {
 
+    private val resolveAction = object : DialogWrapperAction("Resolve") {
+        override fun doAction(e: java.awt.event.ActionEvent?) {
+            onStatusChange(CommentStatus.RESOLVED)
+            close(OK_EXIT_CODE)
+        }
+    }
+
     init {
         title = "Comment #${comment.id}"
         setOKButtonText("Close")
@@ -182,13 +189,6 @@ class CommentPopup(
             formatter.format(instant)
         } catch (e: Exception) {
             isoString
-        }
-    }
-
-    private val resolveAction = object : DialogWrapperAction("Resolve") {
-        override fun doAction(e: java.awt.event.ActionEvent?) {
-            onStatusChange(CommentStatus.RESOLVED)
-            close(OK_EXIT_CODE)
         }
     }
 
