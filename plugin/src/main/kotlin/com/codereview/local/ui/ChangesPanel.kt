@@ -43,14 +43,14 @@ class ChangesPanel(
 
     companion object {
         /**
-         * Open diff view showing changes made in a specific commit
+         * Open diff view showing changes between two commits
          */
-        fun openDiffForCommit(project: Project, commitSha: String, filePath: String? = null) {
+        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null) {
             val basePath = Path.of(project.basePath ?: return)
             val gitService = GitService(basePath)
 
-            // Get files changed in this commit
-            val changedFiles = gitService.getChangedFiles("$commitSha^", commitSha)
+            // Get files changed between commits
+            val changedFiles = gitService.getChangedFiles(fromCommit, toCommit)
             if (changedFiles.isEmpty()) return
 
             // If filePath specified, start with that file
@@ -58,7 +58,8 @@ class ChangesPanel(
                 changedFiles.indexOfFirst { it.path == filePath }.coerceAtLeast(0)
             } else 0
 
-            val shortRef = commitSha.take(7)
+            val fromShort = fromCommit.take(7)
+            val toShort = toCommit.take(7)
             val producers = changedFiles.map { file ->
                 object : DiffRequestProducer {
                     override fun getName(): String = file.path
@@ -66,12 +67,12 @@ class ChangesPanel(
                     override fun process(context: UserDataHolder, indicator: ProgressIndicator): DiffRequest {
                         val fromContent = when (file.changeType) {
                             ChangeType.ADDED -> ""
-                            else -> gitService.getFileAtRef("$commitSha^", file.path) ?: ""
+                            else -> gitService.getFileAtRef(fromCommit, file.path) ?: ""
                         }
 
                         val toContent = when (file.changeType) {
                             ChangeType.DELETED -> ""
-                            else -> gitService.getFileAtRef(commitSha, file.path) ?: ""
+                            else -> gitService.getFileAtRef(toCommit, file.path) ?: ""
                         }
 
                         val fileName = file.path.substringAfterLast('/')
@@ -79,11 +80,11 @@ class ChangesPanel(
 
                         val contentFactory = DiffContentFactory.getInstance()
                         return SimpleDiffRequest(
-                            "${file.path} (Commit $shortRef)",
+                            "${file.path} ($fromShort → $toShort)",
                             contentFactory.create(project, fromContent, fileType),
                             contentFactory.create(project, toContent, fileType),
-                            "$shortRef^",
-                            shortRef
+                            fromShort,
+                            toShort
                         )
                     }
                 }

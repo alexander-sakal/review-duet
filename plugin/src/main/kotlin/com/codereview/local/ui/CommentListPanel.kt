@@ -118,7 +118,7 @@ class CommentListPanel(
                 font = JBFont.small()
             })
             actionsLine.add(createLink(comment.resolveCommit!!) {
-                openCommitDiff(project, comment.resolveCommit!!, comment.file)
+                openDiffBetweenCommits(project, comment.commit, comment.resolveCommit!!, comment.file)
             })
         }
 
@@ -194,8 +194,8 @@ class CommentListPanel(
     }
 
     companion object {
-        fun openCommitDiff(project: Project, commitSha: String, filePath: String? = null) {
-            ChangesPanel.openDiffForCommit(project, commitSha, filePath)
+        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null) {
+            ChangesPanel.openDiffBetweenCommits(project, fromCommit, toCommit, filePath)
         }
     }
 }
