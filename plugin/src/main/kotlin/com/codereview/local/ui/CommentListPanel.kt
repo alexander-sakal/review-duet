@@ -66,34 +66,22 @@ class CommentListPanel(
             anchor = GridBagConstraints.WEST
         }
 
-        // Line 1: #ID [status] path:line + View link
-        val line1 = JPanel(BorderLayout()).apply {
+        // Line 1: #ID [status] path:line
+        val line1 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
             isOpaque = false
         }
 
-        val leftPart = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
-            isOpaque = false
-        }
-
-        leftPart.add(JBLabel("#${comment.id}").apply {
+        line1.add(JBLabel("#${comment.id}").apply {
             foreground = JBColor.GRAY
             font = JBFont.regular()
         })
 
-        leftPart.add(createStatusTag(comment.status))
+        line1.add(createStatusTag(comment.status))
 
-        leftPart.add(JBLabel("${comment.file}:${comment.line}").apply {
+        line1.add(JBLabel("${comment.file}:${comment.line}").apply {
             foreground = UIUtil.getListForeground()
             font = JBFont.regular()
         })
-
-        // View link on the right
-        val viewLink = createLink("View") {
-            onCommentSelected(comment)
-        }
-
-        line1.add(leftPart, BorderLayout.WEST)
-        line1.add(viewLink, BorderLayout.EAST)
 
         innerPanel.add(line1, gbc)
 
@@ -109,25 +97,31 @@ class CommentListPanel(
             innerPanel.add(line2, gbc)
         }
 
-        // Line 3: Commit link (if fixed)
-        if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
-            gbc.gridy++
-            gbc.insets = JBUI.insets(4, 0, 0, 0)
-            val line3 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
-                isOpaque = false
-            }
+        // Line 3: Actions (View + Fixed in commit if applicable)
+        gbc.gridy++
+        gbc.insets = JBUI.insets(4, 0, 0, 0)
+        val actionsLine = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+            isOpaque = false
+        }
 
-            line3.add(JBLabel("Fixed in:").apply {
+        actionsLine.add(createLink("View") {
+            onCommentSelected(comment)
+        })
+
+        if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
+            actionsLine.add(JBLabel("·").apply {
+                foreground = JBColor.GRAY
+            })
+            actionsLine.add(JBLabel("Fixed in:").apply {
                 foreground = JBColor.GRAY
                 font = JBFont.small()
             })
-
-            line3.add(createLink(comment.resolveCommit!!) {
+            actionsLine.add(createLink(comment.resolveCommit!!) {
                 showCommitInLog(project, comment.resolveCommit!!)
             })
-
-            innerPanel.add(line3, gbc)
         }
+
+        innerPanel.add(actionsLine, gbc)
 
         return panel
     }
