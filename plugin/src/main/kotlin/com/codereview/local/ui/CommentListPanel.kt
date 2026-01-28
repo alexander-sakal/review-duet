@@ -6,7 +6,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.ui.ChangesViewContentManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
@@ -21,158 +20,165 @@ class CommentListPanel(
     private val onCommentSelected: (Comment) -> Unit
 ) : JBScrollPane() {
 
-    private val listModel = DefaultListModel<Comment>()
-    private val commentList = JBList(listModel)
+    private val contentPanel = JPanel().apply {
+        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        background = UIUtil.getListBackground()
+    }
 
     init {
-        comments.forEach { listModel.addElement(it) }
-
-        commentList.cellRenderer = MultiLineCommentCellRenderer(project)
-        commentList.selectionMode = ListSelectionModel.SINGLE_SELECTION
-        commentList.fixedCellHeight = -1 // Allow variable height
-        commentList.addListSelectionListener { e ->
-            if (!e.valueIsAdjusting) {
-                val selected = commentList.selectedValue
-                if (selected != null) {
-                    commentList.clearSelection()
-                    onCommentSelected(selected)
-                }
-            }
-        }
-
-        setViewportView(commentList)
+        comments.forEach { addCommentItem(it) }
+        setViewportView(contentPanel)
         border = JBUI.Borders.empty()
     }
 
-    private class MultiLineCommentCellRenderer(private val project: Project) : ListCellRenderer<Comment> {
+    private fun addCommentItem(comment: Comment) {
+        val item = createCommentItem(comment)
+        contentPanel.add(item)
+        contentPanel.add(JSeparator().apply {
+            maximumSize = Dimension(Int.MAX_VALUE, 1)
+        })
+    }
 
-        override fun getListCellRendererComponent(
-            list: JList<out Comment>,
-            value: Comment,
-            index: Int,
-            isSelected: Boolean,
-            cellHasFocus: Boolean
-        ): Component {
-            val panel = JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                border = JBUI.Borders.empty(8, 12)
-                isOpaque = true
-                background = if (isSelected) {
-                    UIUtil.getListSelectionBackground(true)
-                } else {
-                    UIUtil.getListBackground()
-                }
+    private fun createCommentItem(comment: Comment): JPanel {
+        val panel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = JBUI.Borders.empty(8, 12)
+            isOpaque = true
+            background = UIUtil.getListBackground()
+            alignmentX = Component.LEFT_ALIGNMENT
+        }
+
+        // Line 1: #ID [status] path:line + View link
+        val line1 = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            alignmentX = Component.LEFT_ALIGNMENT
+            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
+        }
+
+        val leftPart = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+            isOpaque = false
+        }
+
+        leftPart.add(JBLabel("#${comment.id}").apply {
+            foreground = JBColor.GRAY
+            font = JBFont.regular()
+        })
+
+        leftPart.add(createStatusTag(comment.status))
+
+        leftPart.add(JBLabel("${comment.file}:${comment.line}").apply {
+            foreground = UIUtil.getListForeground()
+            font = JBFont.regular()
+        })
+
+        // View link on the right
+        val viewLink = createLink("View") {
+            onCommentSelected(comment)
+        }
+
+        line1.add(leftPart, BorderLayout.WEST)
+        line1.add(viewLink, BorderLayout.EAST)
+
+        panel.add(line1)
+
+        // Line 2: Comment text
+        comment.firstUserMessage?.let { msg ->
+            val line2 = JBLabel(msg).apply {
+                foreground = JBColor.GRAY
+                font = JBFont.regular()
+                border = JBUI.Borders.emptyLeft(4)
+                alignmentX = Component.LEFT_ALIGNMENT
             }
+            panel.add(Box.createVerticalStrut(4))
+            panel.add(line2)
+        }
 
-            val textColor = if (isSelected) {
-                UIUtil.getListSelectionForeground(true)
-            } else {
-                UIUtil.getListForeground()
-            }
-
-            // Line 1: #ID [status] path:line
-            val line1 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+        // Line 3: Commit link (if fixed)
+        if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
+            val line3 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
                 isOpaque = false
                 alignmentX = Component.LEFT_ALIGNMENT
             }
 
-            line1.add(JBLabel("#${value.id}").apply {
-                foreground = if (isSelected) textColor else JBColor.GRAY
-                font = JBFont.regular()
+            line3.add(JBLabel("Fixed in:").apply {
+                foreground = JBColor.GRAY
+                font = JBFont.small()
             })
 
-            line1.add(createStatusTag(value.status, isSelected))
-
-            line1.add(JBLabel("${value.file}:${value.line}").apply {
-                foreground = textColor
-                font = JBFont.regular()
+            line3.add(createLink(comment.resolveCommit!!) {
+                showCommitInLog(project, comment.resolveCommit!!)
             })
 
-            panel.add(line1)
-
-            // Line 2: Comment text
-            value.firstUserMessage?.let { msg ->
-                val line2 = JBLabel(msg).apply {
-                    foreground = if (isSelected) textColor else JBColor.GRAY
-                    font = JBFont.regular()
-                    border = JBUI.Borders.emptyLeft(4)
-                    alignmentX = Component.LEFT_ALIGNMENT
-                }
-                panel.add(Box.createVerticalStrut(4))
-                panel.add(line2)
-            }
-
-            // Line 3: Commit link (if fixed)
-            if (value.status == CommentStatus.FIXED && value.resolveCommit != null) {
-                val line3 = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
-                    isOpaque = false
-                    alignmentX = Component.LEFT_ALIGNMENT
-                }
-
-                line3.add(JBLabel("Fixed in:").apply {
-                    foreground = if (isSelected) textColor else JBColor.GRAY
-                    font = JBFont.small()
-                })
-
-                // Create a label styled as a link
-                line3.add(JBLabel(value.resolveCommit).apply {
-                    foreground = if (isSelected) textColor else JBColor.BLUE
-                    font = JBFont.small()
-                    cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                    toolTipText = "Click to view commit in Git log"
-                })
-
-                panel.add(Box.createVerticalStrut(4))
-                panel.add(line3)
-            }
-
-            return panel
+            panel.add(Box.createVerticalStrut(4))
+            panel.add(line3)
         }
 
-        private fun createStatusTag(status: CommentStatus, isSelected: Boolean): JComponent {
-            val color = getStatusColor(status)
-            val bgColor = if (isSelected) {
-                Color(color.red, color.green, color.blue, 60)
-            } else {
-                Color(color.red, color.green, color.blue, 30)
-            }
+        return panel
+    }
 
-            return object : JPanel(BorderLayout()) {
-                init {
-                    isOpaque = false
-                    border = JBUI.Borders.empty(1, 6)
-                    add(JBLabel(status.jsonValue).apply {
-                        font = JBFont.small()
-                        foreground = color
-                    }, BorderLayout.CENTER)
+    private fun createLink(text: String, onClick: () -> Unit): JComponent {
+        return JBLabel(text).apply {
+            foreground = JBColor.BLUE
+            font = JBFont.small()
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+            addMouseListener(object : java.awt.event.MouseAdapter() {
+                override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                    onClick()
                 }
 
-                override fun paintComponent(g: Graphics) {
-                    val g2 = g.create() as Graphics2D
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                    g2.color = bgColor
-                    g2.fillRoundRect(0, 0, width, height, 8, 8)
-                    g2.dispose()
-                    super.paintComponent(g)
+                override fun mouseEntered(e: java.awt.event.MouseEvent) {
+                    foreground = JBColor.BLUE.darker()
                 }
-            }
+
+                override fun mouseExited(e: java.awt.event.MouseEvent) {
+                    foreground = JBColor.BLUE
+                }
+            })
         }
+    }
 
-        private fun getStatusColor(status: CommentStatus): Color {
-            return when (status) {
-                CommentStatus.OPEN -> Color(255, 193, 7)
-                CommentStatus.PENDING_USER -> Color(33, 150, 243)
-                CommentStatus.PENDING_AGENT -> Color(255, 152, 0)
-                CommentStatus.FIXED -> Color(76, 175, 80)
-                CommentStatus.RESOLVED -> Color(158, 158, 158)
-                CommentStatus.WONTFIX -> Color(158, 158, 158)
+    private fun createStatusTag(status: CommentStatus): JComponent {
+        val color = getStatusColor(status)
+        val bgColor = Color(color.red, color.green, color.blue, 30)
+
+        return object : JPanel(BorderLayout()) {
+            init {
+                isOpaque = false
+                border = JBUI.Borders.empty(1, 6)
+                add(JBLabel(status.jsonValue).apply {
+                    font = JBFont.small()
+                    foreground = color
+                }, BorderLayout.CENTER)
+            }
+
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = bgColor
+                g2.fillRoundRect(0, 0, width, height, 8, 8)
+                g2.dispose()
+                super.paintComponent(g)
             }
         }
     }
 
+    private fun getStatusColor(status: CommentStatus): Color {
+        return when (status) {
+            CommentStatus.OPEN -> Color(255, 193, 7)
+            CommentStatus.PENDING_USER -> Color(33, 150, 243)
+            CommentStatus.PENDING_AGENT -> Color(255, 152, 0)
+            CommentStatus.FIXED -> Color(76, 175, 80)
+            CommentStatus.RESOLVED -> Color(158, 158, 158)
+            CommentStatus.WONTFIX -> Color(158, 158, 158)
+        }
+    }
+
     fun refresh(newComments: List<Comment>) {
-        listModel.clear()
-        newComments.forEach { listModel.addElement(it) }
+        contentPanel.removeAll()
+        newComments.forEach { addCommentItem(it) }
+        contentPanel.revalidate()
+        contentPanel.repaint()
     }
 
     companion object {
@@ -180,7 +186,6 @@ class CommentListPanel(
             val logManager = VcsProjectLog.getInstance(project)
             val logUi = logManager.mainLogUi ?: return
 
-            // Focus the Git log tool window
             val toolWindow = ChangesViewContentManager.getToolWindowFor(project, "Log")
             toolWindow?.activate {
                 logUi.jumpToCommit(commitSha.take(40), null)
