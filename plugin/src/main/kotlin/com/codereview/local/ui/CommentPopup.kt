@@ -7,10 +7,10 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextArea
+import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
-import java.awt.BorderLayout
-import java.awt.Dimension
+import com.intellij.util.ui.UIUtil
+import java.awt.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -18,130 +18,192 @@ import javax.swing.*
 
 class CommentPopup(
     private val comment: Comment,
-    private val onReply: (String) -> Unit,
     private val onStatusChange: (CommentStatus) -> Unit
 ) : DialogWrapper(true) {
 
-    private val replyArea = JBTextArea(3, 40)
-
     init {
         title = "Comment #${comment.id}"
+        setOKButtonText("Close")
         init()
     }
 
     override fun createCenterPanel(): JComponent {
-        val panel = JPanel(BorderLayout())
-        panel.preferredSize = Dimension(500, 400)
-
-        // Header
-        val headerPanel = JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.empty(0, 0, 10, 0)
-            add(JBLabel("${comment.file}:${comment.line}"), BorderLayout.WEST)
-            add(createStatusLabel(), BorderLayout.EAST)
+        val panel = JPanel(BorderLayout()).apply {
+            preferredSize = Dimension(550, 450)
+            border = JBUI.Borders.empty(4)
         }
 
-        // Thread
+        // Header: file:line + status tag
+        val headerPanel = JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.empty(0, 0, 12, 0)
+
+            add(JBLabel("${comment.file}:${comment.line}").apply {
+                font = JBFont.regular().deriveFont(Font.BOLD)
+            }, BorderLayout.WEST)
+
+            add(createStatusTag(), BorderLayout.EAST)
+        }
+
+        // Thread messages
         val threadPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(5)
+            background = UIUtil.getPanelBackground()
+        }
 
-            for (entry in comment.thread) {
-                add(createThreadEntryPanel(entry))
-                add(Box.createVerticalStrut(10))
+        for ((index, entry) in comment.thread.withIndex()) {
+            threadPanel.add(createThreadEntryPanel(entry))
+            if (index < comment.thread.size - 1) {
+                threadPanel.add(createSeparator())
             }
         }
+
+        // Add glue to push messages to top
+        threadPanel.add(Box.createVerticalGlue())
 
         val threadScroll = JBScrollPane(threadPanel).apply {
-            border = BorderFactory.createTitledBorder("Thread")
+            border = JBUI.Borders.customLine(JBColor.border(), 1)
+            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
         }
 
-        // Reply input
-        val replyPanel = JPanel(BorderLayout()).apply {
-            border = BorderFactory.createTitledBorder("Reply")
-            replyArea.lineWrap = true
-            replyArea.wrapStyleWord = true
-            add(JBScrollPane(replyArea), BorderLayout.CENTER)
-        }
-
-        // Status buttons
-        val buttonPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.X_AXIS)
-
-            if (comment.status == CommentStatus.FIXED) {
-                add(JButton("Resolve").apply {
-                    addActionListener {
-                        onStatusChange(CommentStatus.RESOLVED)
-                        close(OK_EXIT_CODE)
-                    }
-                })
-                add(Box.createHorizontalStrut(5))
-                add(JButton("Reopen").apply {
-                    addActionListener {
-                        onStatusChange(CommentStatus.OPEN)
-                        close(OK_EXIT_CODE)
-                    }
-                })
-            }
-
-            if (comment.status == CommentStatus.OPEN || comment.status == CommentStatus.PENDING_AGENT) {
-                add(JButton("Won't Fix").apply {
-                    addActionListener {
-                        onStatusChange(CommentStatus.WONTFIX)
-                        close(OK_EXIT_CODE)
-                    }
-                })
-            }
-        }
+        // Action buttons at bottom
+        val actionsPanel = createActionsPanel()
 
         panel.add(headerPanel, BorderLayout.NORTH)
         panel.add(threadScroll, BorderLayout.CENTER)
-
-        val bottomPanel = JPanel(BorderLayout())
-        bottomPanel.add(replyPanel, BorderLayout.CENTER)
-        bottomPanel.add(buttonPanel, BorderLayout.SOUTH)
-        panel.add(bottomPanel, BorderLayout.SOUTH)
+        if (actionsPanel.componentCount > 0) {
+            panel.add(actionsPanel, BorderLayout.SOUTH)
+        }
 
         return panel
     }
 
-    private fun createStatusLabel(): JLabel {
-        val color = when (comment.status) {
-            CommentStatus.OPEN -> JBColor.YELLOW.darker()
-            CommentStatus.PENDING_USER -> JBColor.BLUE
-            CommentStatus.PENDING_AGENT -> JBColor.ORANGE
-            CommentStatus.FIXED -> JBColor.GREEN
-            CommentStatus.RESOLVED -> JBColor.GRAY
-            CommentStatus.WONTFIX -> JBColor.GRAY
-        }
-        return JLabel(comment.status.jsonValue).apply {
-            foreground = color
+    private fun createStatusTag(): JComponent {
+        val color = getStatusColor(comment.status)
+        val bgColor = Color(color.red, color.green, color.blue, 30)
+
+        return object : JPanel(BorderLayout()) {
+            init {
+                isOpaque = false
+                border = JBUI.Borders.empty(2, 8)
+                add(JBLabel(comment.status.jsonValue).apply {
+                    font = JBFont.small()
+                    foreground = color
+                }, BorderLayout.CENTER)
+            }
+
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = bgColor
+                g2.fillRoundRect(0, 0, width, height, 10, 10)
+                g2.dispose()
+                super.paintComponent(g)
+            }
         }
     }
 
     private fun createThreadEntryPanel(entry: ThreadEntry): JPanel {
         return JPanel(BorderLayout()).apply {
+            isOpaque = false
+            border = JBUI.Borders.empty(12)
+
+            // Header: author + timestamp
+            val authorColor = if (entry.isUserComment) {
+                JBColor(0x2196F3, 0x6BAFFF)  // Blue
+            } else {
+                JBColor(0x4CAF50, 0x6A9F6A)  // Green
+            }
+
             val authorLabel = JBLabel(if (entry.isUserComment) "You" else "Claude").apply {
-                foreground = if (entry.isUserComment) JBColor.BLUE else JBColor.GREEN.darker()
+                foreground = authorColor
+                font = JBFont.regular().deriveFont(Font.BOLD)
             }
 
             val timeLabel = JBLabel(formatTimestamp(entry.at)).apply {
                 foreground = JBColor.GRAY
+                font = JBFont.small()
             }
 
             val headerRow = JPanel(BorderLayout()).apply {
+                isOpaque = false
                 add(authorLabel, BorderLayout.WEST)
                 add(timeLabel, BorderLayout.EAST)
             }
 
-            val textArea = JBTextArea(entry.text).apply {
+            // Message text
+            val textLabel = JTextArea(entry.text).apply {
                 isEditable = false
                 lineWrap = true
                 wrapStyleWord = true
-                background = null
+                isOpaque = false
+                font = JBFont.regular()
+                foreground = UIUtil.getLabelForeground()
+                border = JBUI.Borders.emptyTop(6)
             }
 
             add(headerRow, BorderLayout.NORTH)
-            add(textArea, BorderLayout.CENTER)
+            add(textLabel, BorderLayout.CENTER)
+        }
+    }
+
+    private fun createSeparator(): JComponent {
+        return JSeparator().apply {
+            maximumSize = Dimension(Int.MAX_VALUE, 1)
+        }
+    }
+
+    private fun createActionsPanel(): JPanel {
+        return JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+            border = JBUI.Borders.emptyTop(12)
+
+            when (comment.status) {
+                CommentStatus.FIXED -> {
+                    add(JButton("Resolve").apply {
+                        addActionListener {
+                            onStatusChange(CommentStatus.RESOLVED)
+                            close(OK_EXIT_CODE)
+                        }
+                    })
+                    add(JButton("Reopen").apply {
+                        addActionListener {
+                            onStatusChange(CommentStatus.OPEN)
+                            close(OK_EXIT_CODE)
+                        }
+                    })
+                }
+                CommentStatus.OPEN -> {
+                    add(JButton("Resolve").apply {
+                        addActionListener {
+                            onStatusChange(CommentStatus.RESOLVED)
+                            close(OK_EXIT_CODE)
+                        }
+                    })
+                    add(JButton("Won't Fix").apply {
+                        addActionListener {
+                            onStatusChange(CommentStatus.WONTFIX)
+                            close(OK_EXIT_CODE)
+                        }
+                    })
+                }
+                CommentStatus.RESOLVED, CommentStatus.WONTFIX -> {
+                    add(JButton("Reopen").apply {
+                        addActionListener {
+                            onStatusChange(CommentStatus.OPEN)
+                            close(OK_EXIT_CODE)
+                        }
+                    })
+                }
+            }
+        }
+    }
+
+    private fun getStatusColor(status: CommentStatus): Color {
+        return when (status) {
+            CommentStatus.OPEN -> Color(255, 193, 7)
+            CommentStatus.FIXED -> Color(76, 175, 80)
+            CommentStatus.RESOLVED -> Color(158, 158, 158)
+            CommentStatus.WONTFIX -> Color(158, 158, 158)
         }
     }
 
@@ -157,17 +219,6 @@ class CommentPopup(
     }
 
     override fun createActions(): Array<Action> {
-        return arrayOf(
-            object : DialogWrapperAction("Reply") {
-                override fun doAction(e: java.awt.event.ActionEvent?) {
-                    val text = replyArea.text.trim()
-                    if (text.isNotEmpty()) {
-                        onReply(text)
-                    }
-                    close(OK_EXIT_CODE)
-                }
-            },
-            cancelAction
-        )
+        return arrayOf(okAction)
     }
 }
