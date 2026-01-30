@@ -38,9 +38,20 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return { command, args, options };
 }
 
+function getReviewPath(options: Record<string, string>, cwd: string): string {
+  if (options.review) {
+    return options.review;
+  }
+  // Default: .review-duet/{branch}.json
+  const { execSync } = require('child_process');
+  const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
+  return `${cwd}/.review-duet/${branch}.json`;
+}
+
 export function runCli(argv: string[], cwd: string = process.cwd()): string {
   const { command, args, options } = parseArgs(argv);
-  const store = new ReviewStore(cwd);
+  const reviewPath = getReviewPath(options, cwd);
+  const store = new ReviewStore(reviewPath);
 
   switch (command) {
     case 'list': {
@@ -76,10 +87,13 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
       return `review-duet CLI - Code review helper for Claude Code
 
 Usage:
-  review-duet list [--status=<status>]              List comments
-  review-duet fix <id> --commit <sha> [--message]   Mark as fixed
-  review-duet show <id>                             Show comment details
-  review-duet accept                                Accept changes, move baseline to HEAD
+  review-duet list [--status=<status>] [--review=<path>]   List comments
+  review-duet fix <id> --commit <sha> [--message]          Mark as fixed
+  review-duet show <id>                                    Show comment details
+  review-duet accept                                       Accept changes, move baseline to HEAD
+
+Options:
+  --review=<path>  Explicit path to review file (default: .review-duet/{branch}.json)
 
 Statuses: open, fixed, resolved`;
   }
