@@ -11,7 +11,7 @@ class ReviewFileWatcher(private val project: Project) : BulkFileListener {
 
     override fun after(events: MutableList<out VFileEvent>) {
         val reviewFileChanged = events.any { event ->
-            event.path?.contains(".review/comments.json") == true
+            event.path?.contains(".review-duet/") == true && event.path?.endsWith(".json") == true
         }
 
         if (reviewFileChanged) {
