@@ -540,10 +540,26 @@ class DiffCommentExtension : DiffExtension() {
         }
         actionsPanel.add(deleteButton)
 
+        // Format date from first thread entry
+        val dateLabel = comment.thread.firstOrNull()?.at?.let { timestamp ->
+            try {
+                val instant = java.time.Instant.parse(timestamp)
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault())
+                JBLabel(formatter.format(instant)).apply {
+                    foreground = JBColor.GRAY
+                    font = JBFont.small()
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+
         // Wrap in FlowLayout to prevent BorderLayout.WEST from stretching vertically
-        val tagWrapper = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+        val tagWrapper = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
             isOpaque = false
             border = JBUI.Borders.empty()
+            dateLabel?.let { add(it) }
             add(statusTag)
         }
         headerPanel.add(tagWrapper, BorderLayout.WEST)
