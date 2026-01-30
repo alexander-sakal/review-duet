@@ -18,12 +18,20 @@ import javax.swing.*
 
 class CommentPopup(
     private val comment: Comment,
-    private val onStatusChange: (CommentStatus) -> Unit
+    private val onStatusChange: (CommentStatus) -> Unit,
+    private val onDelete: (() -> Unit)? = null
 ) : DialogWrapper(true) {
 
     private val resolveAction = object : DialogWrapperAction("Resolve") {
         override fun doAction(e: java.awt.event.ActionEvent?) {
             onStatusChange(CommentStatus.RESOLVED)
+            close(OK_EXIT_CODE)
+        }
+    }
+
+    private val deleteAction = object : DialogWrapperAction("Delete") {
+        override fun doAction(e: java.awt.event.ActionEvent?) {
+            onDelete?.invoke()
             close(OK_EXIT_CODE)
         }
     }
@@ -182,11 +190,32 @@ class CommentPopup(
     }
 
     override fun createActions(): Array<Action> {
+        val actions = mutableListOf<Action>()
+
         // Show Resolve button only for non-resolved comments
-        return if (comment.status != CommentStatus.RESOLVED) {
-            arrayOf(resolveAction, okAction)
-        } else {
-            arrayOf(okAction)
+        if (comment.status != CommentStatus.RESOLVED) {
+            actions.add(resolveAction)
         }
+
+        actions.add(okAction)
+        return actions.toTypedArray()
+    }
+
+    override fun createLeftSideActions(): Array<Action> {
+        // Delete button on the left side
+        return if (onDelete != null) {
+            arrayOf(deleteAction)
+        } else {
+            emptyArray()
+        }
+    }
+
+    override fun createJButtonForAction(action: Action): JButton {
+        val button = super.createJButtonForAction(action)
+        // Make delete button red
+        if (action == deleteAction) {
+            button.foreground = JBColor.RED
+        }
+        return button
     }
 }

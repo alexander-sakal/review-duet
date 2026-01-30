@@ -87,6 +87,12 @@ class ReviewService(private val projectRoot: Path) {
         }
     }
 
+    fun deleteComment(commentId: Int) {
+        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        data.comments.removeIf { it.id == commentId }
+        saveReviewData(data)
+    }
+
 
     fun isFileReviewed(filePath: String): Boolean {
         val data = loadReviewData() ?: return false

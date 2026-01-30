@@ -172,6 +172,10 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             onStatusChange = { status ->
                 reviewService.updateCommentStatus(comment.id, status)
                 refresh()
+            },
+            onDelete = {
+                reviewService.deleteComment(comment.id)
+                refresh()
             }
         )
         popup.show()

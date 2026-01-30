@@ -37,7 +37,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.JBColor
 import com.intellij.ui.RoundedLineBorder
-import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
@@ -503,6 +502,24 @@ class DiffCommentExtension : DiffExtension() {
         }
         actionsPanel.add(editButton)
 
+        val deleteButton = InlineIconButton(
+            AllIcons.Actions.GC,
+            AllIcons.Actions.GC
+        ).apply {
+            actionListener = java.awt.event.ActionListener {
+                val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
+                    "Delete this comment?",
+                    "Delete Comment",
+                    com.intellij.openapi.ui.Messages.getQuestionIcon()
+                )
+                if (result == com.intellij.openapi.ui.Messages.YES) {
+                    ReviewService(Path.of(basePath)).deleteComment(comment.id)
+                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                }
+            }
+        }
+        actionsPanel.add(deleteButton)
+
         headerPanel.add(statusTag, BorderLayout.WEST)
         headerPanel.add(actionsPanel, BorderLayout.EAST)
 
@@ -522,35 +539,7 @@ class DiffCommentExtension : DiffExtension() {
             contentPanel.add(textPane)
         }
 
-        val bottomActionsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
-            isOpaque = false
-            border = JBUI.Borders.emptyTop(8)
-        }
-
-        // Actions based on current status
-        when (comment.status) {
-            CommentStatus.OPEN -> {
-                // User can resolve directly or mark as won't fix
-                bottomActionsPanel.add(ActionLink("Resolve") {
-                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
-                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
-                }.apply { isFocusPainted = false })
-            }
-            CommentStatus.FIXED -> {
-                // User verifies the fix - can resolve
-                bottomActionsPanel.add(ActionLink("Resolve") {
-                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
-                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
-                }.apply { isFocusPainted = false })
-            }
-            CommentStatus.RESOLVED -> {
-                // No actions
-            }
-        }
-
-        if (bottomActionsPanel.componentCount > 0) {
-            contentPanel.add(bottomActionsPanel)
-        }
+        // No bottom actions - only open comments shown in diff view, resolve via review toolbar
 
         hoverPanel.add(contentPanel, BorderLayout.CENTER)
 
@@ -674,15 +663,17 @@ class DiffCommentExtension : DiffExtension() {
         return object : JPanel(BorderLayout()) {
             init {
                 isOpaque = false
-                border = JBUI.Borders.empty(2, 8)
+                border = JBUI.Borders.empty(1, 6)
                 add(label, BorderLayout.CENTER)
             }
+
+            override fun getMaximumSize(): Dimension = preferredSize
 
             override fun paintComponent(g: Graphics) {
                 val g2 = g.create() as Graphics2D
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
                 g2.color = bgColor
-                g2.fillRoundRect(0, 0, width, height, 10, 10)
+                g2.fillRoundRect(0, 0, width, height, 8, 8)
                 g2.dispose()
                 super.paintComponent(g)
             }
