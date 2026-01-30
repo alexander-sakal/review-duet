@@ -18,6 +18,25 @@ class ReviewService(private val projectRoot: Path) {
         return reviewDuetDir.resolve("$branch.json")
     }
 
+    private fun ensureGitignore() {
+        val gitignore = projectRoot.resolve(".gitignore")
+        val entry = ".review-duet/"
+
+        if (gitignore.exists()) {
+            val content = gitignore.readText()
+            if (!content.contains(entry)) {
+                val newContent = if (content.endsWith("\n")) {
+                    "$content$entry\n"
+                } else {
+                    "$content\n$entry\n"
+                }
+                gitignore.writeText(newContent)
+            }
+        } else {
+            gitignore.writeText("$entry\n")
+        }
+    }
+
     fun hasActiveReview(): Boolean = getCommentsFile().exists()
 
     fun loadReviewData(): ReviewData? {
@@ -31,6 +50,7 @@ class ReviewService(private val projectRoot: Path) {
     fun saveReviewData(data: ReviewData) {
         if (!reviewDuetDir.exists()) {
             reviewDuetDir.createDirectories()
+            ensureGitignore()
         }
         getCommentsFile().writeText(serializer.serialize(data))
         cachedData = data
