@@ -651,6 +651,7 @@ class DiffCommentExtension : DiffExtension() {
 
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
+            cursor = Cursor.getDefaultCursor()
             border = JBUI.Borders.emptyTop(8)
         }
 
@@ -659,7 +660,10 @@ class DiffCommentExtension : DiffExtension() {
             font = JBFont.small()
         }
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply { isOpaque = false }
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
+            isOpaque = false
+            cursor = Cursor.getDefaultCursor()
+        }
 
         val saveAndRefresh = {
             val newText = textArea.text.trim()
@@ -671,11 +675,13 @@ class DiffCommentExtension : DiffExtension() {
 
         buttonPanel.add(JButton("Cancel").apply {
             isContentAreaFilled = false
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addActionListener { onCancel() }
         })
 
         buttonPanel.add(JButton("Save").apply {
             isContentAreaFilled = false
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addActionListener { saveAndRefresh() }
         })
 
@@ -963,6 +969,7 @@ class DiffCommentExtension : DiffExtension() {
         val panel = JPanel(BorderLayout()).apply {
             isOpaque = true
             background = bgColor
+            cursor = Cursor.getDefaultCursor()
             border = BorderFactory.createCompoundBorder(
                 RoundedLineBorder(borderColor, 8, 1),
                 JBUI.Borders.empty(8)
@@ -986,6 +993,7 @@ class DiffCommentExtension : DiffExtension() {
 
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
+            cursor = Cursor.getDefaultCursor()
             border = JBUI.Borders.emptyTop(8)
         }
 
@@ -994,7 +1002,10 @@ class DiffCommentExtension : DiffExtension() {
             font = JBFont.small()
         }
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply { isOpaque = false }
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
+            isOpaque = false
+            cursor = Cursor.getDefaultCursor()
+        }
 
         val submitAction = {
             val text = textArea.text.trim()
@@ -1007,11 +1018,13 @@ class DiffCommentExtension : DiffExtension() {
 
         buttonPanel.add(JButton("Cancel").apply {
             isContentAreaFilled = false
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addActionListener { onDismiss() }
         })
 
         buttonPanel.add(JButton("Add Comment").apply {
             isContentAreaFilled = false
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addActionListener { submitAction() }
         })
 
@@ -1035,6 +1048,7 @@ class DiffCommentExtension : DiffExtension() {
 
         val outerPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
+            cursor = Cursor.getDefaultCursor()
             border = JBUI.Borders.empty(4, 8, 4, 8)
             add(panel, BorderLayout.CENTER)
         }
