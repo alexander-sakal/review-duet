@@ -670,12 +670,12 @@ class DiffCommentExtension : DiffExtension() {
         }
 
         buttonPanel.add(JButton("Cancel").apply {
-            isOpaque = false
+            isContentAreaFilled = false
             addActionListener { onCancel() }
         })
 
         buttonPanel.add(JButton("Save").apply {
-            putClientProperty("JButton.buttonType", "default")
+            isContentAreaFilled = false
             addActionListener { saveAndRefresh() }
         })
 
@@ -1006,12 +1006,12 @@ class DiffCommentExtension : DiffExtension() {
         }
 
         buttonPanel.add(JButton("Cancel").apply {
-            isOpaque = false
+            isContentAreaFilled = false
             addActionListener { onDismiss() }
         })
 
         buttonPanel.add(JButton("Add Comment").apply {
-            putClientProperty("JButton.buttonType", "default")
+            isContentAreaFilled = false
             addActionListener { submitAction() }
         })
 
