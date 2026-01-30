@@ -15,7 +15,8 @@ import javax.swing.*
 class CommentListPanel(
     private val project: Project,
     private val comments: List<Comment>,
-    private val onCommentSelected: (Comment) -> Unit
+    private val onCommentSelected: (Comment) -> Unit,
+    private val onStatusChange: ((Comment, CommentStatus) -> Unit)? = null
 ) : JBScrollPane() {
 
     private val contentPanel = JPanel().apply {
@@ -118,8 +119,21 @@ class CommentListPanel(
                 font = JBFont.small()
             })
             actionsLine.add(createLink(comment.resolveCommit!!) {
-                openDiffBetweenCommits(project, comment.commit, comment.resolveCommit!!, comment.file)
+                // Show only changes in the fix commit itself (commit^ to commit)
+                openDiffForSingleCommit(project, comment.resolveCommit!!, comment.file)
             })
+
+            // Add Resolve link
+            if (onStatusChange != null) {
+                actionsLine.add(Box.createHorizontalStrut(8))
+                actionsLine.add(JBLabel("·").apply {
+                    foreground = JBColor.GRAY
+                })
+                actionsLine.add(Box.createHorizontalStrut(8))
+                actionsLine.add(createLink("Resolve") {
+                    onStatusChange.invoke(comment, CommentStatus.RESOLVED)
+                })
+            }
         }
 
         innerPanel.add(actionsLine, gbc)
@@ -192,8 +206,8 @@ class CommentListPanel(
     }
 
     companion object {
-        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null) {
-            ChangesPanel.openDiffBetweenCommits(project, fromCommit, toCommit, filePath)
+        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null) {
+            ChangesPanel.openDiffForSingleCommit(project, commitSha, filePath)
         }
     }
 }

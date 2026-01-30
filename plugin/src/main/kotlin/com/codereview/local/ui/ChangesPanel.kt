@@ -43,6 +43,17 @@ class ChangesPanel(
 
     companion object {
         /**
+         * Open diff view showing changes in a single commit (commit^ to commit)
+         */
+        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null) {
+            val basePath = Path.of(project.basePath ?: return)
+            val gitService = GitService(basePath)
+
+            val parentCommit = gitService.getParentCommitSha(commitSha) ?: return
+            openDiffBetweenCommits(project, parentCommit, commitSha, filePath)
+        }
+
+        /**
          * Open diff view showing changes between two commits
          */
         fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null) {

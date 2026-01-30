@@ -114,11 +114,26 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
         }
 
-        // Comment list panel
-        val commentsContent = JBPanel<JBPanel<*>>(BorderLayout()).apply {
-            val commentList = CommentListPanel(project, data.comments) { comment ->
-                showCommentDetails(comment)
+        // Comment list panel - sort: fixed first (user reviews), open (agent's turn), resolved last
+        val sortedComments = data.comments.sortedWith(compareBy { comment ->
+            when (comment.status) {
+                CommentStatus.FIXED -> 0    // User needs to review these
+                CommentStatus.OPEN -> 1     // Waiting for agent
+                CommentStatus.RESOLVED -> 2
+                CommentStatus.WONTFIX -> 2
             }
+        })
+
+        val commentsContent = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            val commentList = CommentListPanel(
+                project,
+                sortedComments,
+                onCommentSelected = { comment -> showCommentDetails(comment) },
+                onStatusChange = { comment, status ->
+                    reviewService.updateCommentStatus(comment.id, status)
+                    refresh()
+                }
+            )
             add(commentList, BorderLayout.CENTER)
         }
 
