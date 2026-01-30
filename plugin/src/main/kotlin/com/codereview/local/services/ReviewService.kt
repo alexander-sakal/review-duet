@@ -7,28 +7,32 @@ import kotlin.io.path.*
 
 class ReviewService(private val projectRoot: Path) {
 
-    private val reviewDir: Path = projectRoot.resolve(".review")
-    private val commentsFile: Path = reviewDir.resolve("comments.json")
-    private val serializer = ReviewDataSerializer()
     private val gitService = GitService(projectRoot)
+    private val reviewDuetDir: Path = projectRoot.resolve(".review-duet")
+    private val serializer = ReviewDataSerializer()
 
     private var cachedData: ReviewData? = null
 
-    fun hasActiveReview(): Boolean = commentsFile.exists()
+    private fun getCommentsFile(): Path {
+        val branch = gitService.getCurrentBranch() ?: "main"
+        return reviewDuetDir.resolve("$branch.json")
+    }
+
+    fun hasActiveReview(): Boolean = getCommentsFile().exists()
 
     fun loadReviewData(): ReviewData? {
         if (!hasActiveReview()) return null
 
-        val json = commentsFile.readText()
+        val json = getCommentsFile().readText()
         cachedData = serializer.deserialize(json)
         return cachedData
     }
 
     fun saveReviewData(data: ReviewData) {
-        if (!reviewDir.exists()) {
-            reviewDir.createDirectories()
+        if (!reviewDuetDir.exists()) {
+            reviewDuetDir.createDirectories()
         }
-        commentsFile.writeText(serializer.serialize(data))
+        getCommentsFile().writeText(serializer.serialize(data))
         cachedData = data
     }
 
