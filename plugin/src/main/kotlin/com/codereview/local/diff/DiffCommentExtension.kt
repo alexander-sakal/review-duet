@@ -421,25 +421,36 @@ class DiffCommentExtension : DiffExtension() {
         val fgColor = colorsScheme.defaultForeground
         val borderColor = colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: JBColor.border()
 
-        val inlayPadding = 8
+        val inlayPadding = 6
         val verticalGap = 4
 
         val cardLayout = CardLayout()
-        val cardPanel = JPanel(cardLayout).apply { isOpaque = false }
+        var currentCard: JComponent? = null
+        val cardPanel = object : JPanel(cardLayout) {
+            override fun getPreferredSize(): Dimension {
+                // Use current card's size, not max of all cards
+                return currentCard?.preferredSize ?: super.getPreferredSize()
+            }
+        }.apply { isOpaque = false }
 
-        val displayPanel = createDisplayPanel(
+        var displayPanel: JComponent? = null
+        var editPanel: JComponent? = null
+
+        displayPanel = createDisplayPanel(
             comment, editor, filePath, basePath, commentInlays,
             bgColor, fgColor, borderColor, inlayPadding, verticalGap
         ) {
+            currentCard = editPanel
             cardLayout.show(cardPanel, "edit")
             cardPanel.revalidate()
             cardPanel.repaint()
         }
 
-        val editPanel = createEditPanel(
+        editPanel = createEditPanel(
             comment, editor, filePath, basePath, commentInlays,
             bgColor, fgColor, borderColor, inlayPadding
         ) {
+            currentCard = displayPanel
             cardLayout.show(cardPanel, "display")
             cardPanel.revalidate()
             cardPanel.repaint()
@@ -447,12 +458,13 @@ class DiffCommentExtension : DiffExtension() {
 
         cardPanel.add(displayPanel, "display")
         cardPanel.add(editPanel, "edit")
+        currentCard = displayPanel
         cardLayout.show(cardPanel, "display")
 
         return JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.empty(4, 8, 4, 8)
-            add(cardPanel, BorderLayout.CENTER)
+            add(cardPanel, BorderLayout.NORTH)
         }
     }
 
@@ -485,7 +497,12 @@ class DiffCommentExtension : DiffExtension() {
             isOpaque = false
         }
 
-        val headerPanel = JPanel(BorderLayout()).apply { isOpaque = false }
+        val headerPanel = object : JPanel(BorderLayout()) {
+            override fun getMaximumSize(): Dimension {
+                val pref = preferredSize
+                return Dimension(Int.MAX_VALUE, pref.height)
+            }
+        }.apply { isOpaque = false }
 
         val statusTag = createTagLabel(comment.status.jsonValue, getStatusColor(comment.status))
 
@@ -520,14 +537,25 @@ class DiffCommentExtension : DiffExtension() {
         }
         actionsPanel.add(deleteButton)
 
-        headerPanel.add(statusTag, BorderLayout.WEST)
+        // Wrap in FlowLayout to prevent BorderLayout.WEST from stretching vertically
+        val tagWrapper = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+            isOpaque = false
+            border = JBUI.Borders.empty()
+            add(statusTag)
+        }
+        headerPanel.add(tagWrapper, BorderLayout.WEST)
         headerPanel.add(actionsPanel, BorderLayout.EAST)
 
         contentPanel.add(headerPanel)
-        contentPanel.add(Box.createVerticalStrut(8))
+        contentPanel.add(Box.createVerticalStrut(4))
 
         for (entry in comment.thread) {
-            val textPane = JTextArea(entry.text).apply {
+            val textPane = object : JTextArea(entry.text) {
+                override fun getMaximumSize(): Dimension {
+                    val pref = preferredSize
+                    return Dimension(Int.MAX_VALUE, pref.height)
+                }
+            }.apply {
                 isEditable = false
                 isOpaque = false
                 lineWrap = true
@@ -541,7 +569,10 @@ class DiffCommentExtension : DiffExtension() {
 
         // No bottom actions - only open comments shown in diff view, resolve via review toolbar
 
-        hoverPanel.add(contentPanel, BorderLayout.CENTER)
+        // Push content to top
+        contentPanel.add(Box.createVerticalGlue())
+
+        hoverPanel.add(contentPanel, BorderLayout.NORTH)
 
         object : HoverStateListener() {
             override fun hoverChanged(component: java.awt.Component, hovered: Boolean) {
@@ -655,27 +686,43 @@ class DiffCommentExtension : DiffExtension() {
             Color(color.red, color.green, color.blue, 30),
             Color(color.red, color.green, color.blue, 50)
         )
-        val label = JBLabel(text).apply {
-            font = JBFont.small()
-            foreground = color
-            isOpaque = false
-        }
-        return object : JPanel(BorderLayout()) {
+        val font = JBFont.small()
+        val hPad = 6
+        val vPad = 2
+
+        return object : JComponent() {
             init {
                 isOpaque = false
-                border = JBUI.Borders.empty(1, 6)
-                add(label, BorderLayout.CENTER)
             }
 
+            override fun getPreferredSize(): Dimension {
+                val fm = getFontMetrics(font)
+                val textWidth = fm.stringWidth(text)
+                val textHeight = fm.height
+                return Dimension(textWidth + hPad * 2, textHeight + vPad * 2)
+            }
+
+            override fun getMinimumSize(): Dimension = preferredSize
             override fun getMaximumSize(): Dimension = preferredSize
 
             override fun paintComponent(g: Graphics) {
                 val g2 = g.create() as Graphics2D
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+
+                // Draw rounded background
                 g2.color = bgColor
                 g2.fillRoundRect(0, 0, width, height, 8, 8)
+
+                // Draw text
+                g2.font = font
+                g2.color = color
+                val fm = g2.fontMetrics
+                val x = hPad
+                val y = (height + fm.ascent - fm.descent) / 2
+                g2.drawString(text, x, y)
+
                 g2.dispose()
-                super.paintComponent(g)
             }
         }
     }
