@@ -30,6 +30,11 @@ class GitService(private val projectRoot: Path) {
         return result?.trim()
     }
 
+    fun getCurrentBranch(): String? {
+        val result = runGitCommandWithOutput("branch", "--show-current")
+        return result?.trim()?.takeIf { it.isNotBlank() }
+    }
+
     fun getFileAtRef(ref: String, filePath: String): String? {
         return runGitCommandWithOutput("show", "$ref:$filePath")
     }
