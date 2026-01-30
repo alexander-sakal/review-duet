@@ -535,10 +535,6 @@ class DiffCommentExtension : DiffExtension() {
                     ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.RESOLVED)
                     refreshCommentInlays(editor, filePath, basePath, commentInlays)
                 }.apply { isFocusPainted = false })
-                bottomActionsPanel.add(ActionLink("Won't Fix") {
-                    ReviewService(Path.of(basePath)).updateCommentStatus(comment.id, CommentStatus.WONTFIX)
-                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
-                }.apply { isFocusPainted = false })
             }
             CommentStatus.FIXED -> {
                 // User verifies the fix - can resolve
@@ -547,7 +543,7 @@ class DiffCommentExtension : DiffExtension() {
                     refreshCommentInlays(editor, filePath, basePath, commentInlays)
                 }.apply { isFocusPainted = false })
             }
-            CommentStatus.RESOLVED, CommentStatus.WONTFIX -> {
+            CommentStatus.RESOLVED -> {
                 // No actions
             }
         }
@@ -796,7 +792,6 @@ class DiffCommentExtension : DiffExtension() {
             CommentStatus.OPEN -> Color(255, 193, 7)
             CommentStatus.FIXED -> Color(76, 175, 80)
             CommentStatus.RESOLVED -> Color(158, 158, 158)
-            CommentStatus.WONTFIX -> Color(158, 158, 158)
         }
     }
 

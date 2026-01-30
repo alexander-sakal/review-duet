@@ -1,14 +1,12 @@
 export type CommentStatus =
   | 'open'
   | 'fixed'
-  | 'resolved'
-  | 'wontfix';
+  | 'resolved';
 
 const VALID_STATUSES: CommentStatus[] = [
   'open',
   'fixed',
-  'resolved',
-  'wontfix'
+  'resolved'
 ];
 
 export function isValidStatus(status: string): status is CommentStatus {

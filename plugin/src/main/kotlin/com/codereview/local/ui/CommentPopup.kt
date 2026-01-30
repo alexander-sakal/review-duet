@@ -159,16 +159,6 @@ class CommentPopup(
         return JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
             alignmentX = Component.LEFT_ALIGNMENT
             border = JBUI.Borders.empty(8, 0, 0, 0)
-
-            // Won't Fix only for open comments
-            if (comment.status == CommentStatus.OPEN) {
-                add(JButton("Won't Fix").apply {
-                    addActionListener {
-                        onStatusChange(CommentStatus.WONTFIX)
-                        close(OK_EXIT_CODE)
-                    }
-                })
-            }
         }
     }
 
@@ -177,7 +167,6 @@ class CommentPopup(
             CommentStatus.OPEN -> Color(255, 193, 7)
             CommentStatus.FIXED -> Color(76, 175, 80)
             CommentStatus.RESOLVED -> Color(158, 158, 158)
-            CommentStatus.WONTFIX -> Color(158, 158, 158)
         }
     }
 
@@ -194,7 +183,7 @@ class CommentPopup(
 
     override fun createActions(): Array<Action> {
         // Show Resolve button only for non-resolved comments
-        return if (comment.status != CommentStatus.RESOLVED && comment.status != CommentStatus.WONTFIX) {
+        return if (comment.status != CommentStatus.RESOLVED) {
             arrayOf(resolveAction, okAction)
         } else {
             arrayOf(okAction)

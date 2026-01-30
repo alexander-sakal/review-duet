@@ -193,7 +193,6 @@ class CommentListPanel(
             CommentStatus.OPEN -> Color(255, 193, 7)
             CommentStatus.FIXED -> Color(76, 175, 80)
             CommentStatus.RESOLVED -> Color(158, 158, 158)
-            CommentStatus.WONTFIX -> Color(158, 158, 158)
         }
     }
 

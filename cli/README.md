@@ -35,7 +35,6 @@ review show 1
 - `pending-agent` - Waiting for Claude to process
 - `fixed` - Claude marked as fixed, needs verification
 - `resolved` - User verified, done
-- `wontfix` - Not addressing
 
 ## Integration
 

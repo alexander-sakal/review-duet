@@ -120,7 +120,6 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 CommentStatus.FIXED -> 0    // User needs to review these
                 CommentStatus.OPEN -> 1     // Waiting for agent
                 CommentStatus.RESOLVED -> 2
-                CommentStatus.WONTFIX -> 2
             }
         })
 

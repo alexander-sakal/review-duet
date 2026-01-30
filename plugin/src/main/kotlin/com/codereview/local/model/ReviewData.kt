@@ -3,8 +3,7 @@ package com.codereview.local.model
 enum class CommentStatus(val jsonValue: String) {
     OPEN("open"),
     FIXED("fixed"),
-    RESOLVED("resolved"),
-    WONTFIX("wontfix");
+    RESOLVED("resolved");
 
     companion object {
         fun fromString(value: String): CommentStatus {

@@ -6,8 +6,7 @@ describe('CommentStatus', () => {
     const statuses: CommentStatus[] = [
       'open',
       'fixed',
-      'resolved',
-      'wontfix'
+      'resolved'
     ];
 
     statuses.forEach(status => {

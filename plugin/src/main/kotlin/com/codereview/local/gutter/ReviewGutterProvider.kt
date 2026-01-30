@@ -60,7 +60,6 @@ class ReviewGutterProvider : LineMarkerProvider {
             CommentStatus.OPEN -> JBColor.YELLOW
             CommentStatus.FIXED -> JBColor.GREEN
             CommentStatus.RESOLVED -> JBColor.GRAY
-            CommentStatus.WONTFIX -> JBColor.GRAY
         }
 
         override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {

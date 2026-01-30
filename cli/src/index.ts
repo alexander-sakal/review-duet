@@ -81,7 +81,7 @@ Usage:
   review-duet show <id>                             Show comment details
   review-duet accept                                Accept changes, move baseline to HEAD
 
-Statuses: open, fixed, resolved, wontfix`;
+Statuses: open, fixed, resolved`;
   }
 }
 
