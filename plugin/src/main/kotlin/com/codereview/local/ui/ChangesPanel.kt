@@ -42,21 +42,24 @@ class ChangesPanel(
 ) : JPanel(BorderLayout()) {
 
     companion object {
+        val IS_COMMENT_REVIEW_KEY = com.intellij.openapi.util.Key.create<Boolean>("CodeReview.IsCommentReview")
+        val COMMENT_ID_KEY = com.intellij.openapi.util.Key.create<Int>("CodeReview.CommentId")
+
         /**
          * Open diff view showing changes in a single commit (commit^ to commit)
          */
-        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null) {
+        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null) {
             val basePath = Path.of(project.basePath ?: return)
             val gitService = GitService(basePath)
 
             val parentCommit = gitService.getParentCommitSha(commitSha) ?: return
-            openDiffBetweenCommits(project, parentCommit, commitSha, filePath)
+            openDiffBetweenCommits(project, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId)
         }
 
         /**
          * Open diff view showing changes between two commits
          */
-        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null) {
+        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null) {
             val basePath = Path.of(project.basePath ?: return)
             val gitService = GitService(basePath)
 
@@ -90,13 +93,21 @@ class ChangesPanel(
                         val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
 
                         val contentFactory = DiffContentFactory.getInstance()
-                        return SimpleDiffRequest(
+                        val request = SimpleDiffRequest(
                             "${file.path} ($fromShort → $toShort)",
                             contentFactory.create(project, fromContent, fileType),
                             contentFactory.create(project, toContent, fileType),
                             fromShort,
                             toShort
                         )
+
+                        // Mark as comment review if applicable
+                        if (isCommentReview) {
+                            request.putUserData(IS_COMMENT_REVIEW_KEY, true)
+                            commentId?.let { request.putUserData(COMMENT_ID_KEY, it) }
+                        }
+
+                        return request
                     }
                 }
             }

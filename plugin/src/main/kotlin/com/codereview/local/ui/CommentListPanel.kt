@@ -120,7 +120,7 @@ class CommentListPanel(
             })
             actionsLine.add(createLink(comment.resolveCommit!!) {
                 // Show only changes in the fix commit itself (commit^ to commit)
-                openDiffForSingleCommit(project, comment.resolveCommit!!, comment.file)
+                openDiffForSingleCommit(project, comment.resolveCommit!!, comment.file, comment.id)
             })
 
             // Add Resolve link
@@ -206,8 +206,8 @@ class CommentListPanel(
     }
 
     companion object {
-        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null) {
-            ChangesPanel.openDiffForSingleCommit(project, commitSha, filePath)
+        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null) {
+            ChangesPanel.openDiffForSingleCommit(project, commitSha, filePath, commentId)
         }
     }
 }

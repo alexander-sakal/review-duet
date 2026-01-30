@@ -72,10 +72,170 @@ class DiffCommentExtension : DiffExtension() {
         // Add reviewed action to context
         setupReviewedAction(viewer, context, filePath, basePath)
 
+        // Add custom review toolbar only for comment review diffs
+        val isCommentReview = request.getUserData(com.codereview.local.ui.ChangesPanel.IS_COMMENT_REVIEW_KEY) == true
+        val commentId = request.getUserData(com.codereview.local.ui.ChangesPanel.COMMENT_ID_KEY)
+        if (isCommentReview && commentId != null) {
+            SwingUtilities.invokeLater {
+                addReviewToolbar(viewer, project, filePath, basePath, commentId)
+            }
+        }
+
         // Display existing comments
         SwingUtilities.invokeLater {
             displayComments(editor, filePath, basePath, commentInlays)
         }
+    }
+
+    private fun addReviewToolbar(viewer: TwosideTextDiffViewer, project: Project, filePath: String, basePath: String, commentId: Int) {
+        val viewerComponent = viewer.component
+        val parent = viewerComponent.parent as? JComponent ?: return
+
+        // Create review toolbar panel
+        val toolbarPanel = createReviewToolbarPanel(project, filePath, basePath, commentId) {
+            // Callback to close the diff window after resolve
+            SwingUtilities.getWindowAncestor(parent)?.dispose()
+        }
+
+        // Find the viewer in parent and wrap it
+        val parentLayout = parent.layout
+        if (parentLayout is BorderLayout) {
+            parent.remove(viewerComponent)
+
+            val wrapper = JPanel(BorderLayout()).apply {
+                add(toolbarPanel, BorderLayout.NORTH)
+                add(viewerComponent, BorderLayout.CENTER)
+            }
+
+            parent.add(wrapper, BorderLayout.CENTER)
+            parent.revalidate()
+            parent.repaint()
+        }
+    }
+
+    private fun createReviewToolbarPanel(project: Project, filePath: String, basePath: String, commentId: Int, onResolve: () -> Unit): JComponent {
+        val reviewService = ReviewService(Path.of(basePath))
+        val reviewData = reviewService.loadReviewData()
+        val comment = reviewData?.getComment(commentId)
+
+        val separatorColor = JBColor(Color(0, 0, 0, 25), Color(255, 255, 255, 25))
+        val panel = JPanel(BorderLayout()).apply {
+            border = BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 1, 0, separatorColor),  // Top and bottom, very light
+                JBUI.Borders.empty(4, 8, 4, 2)
+            )
+            background = UIUtil.getPanelBackground()
+        }
+
+        // Left side: Comment info - use GridBagLayout for vertical centering
+        val infoPanel = JPanel(GridBagLayout()).apply {
+            isOpaque = false
+        }
+
+        val gbc = GridBagConstraints().apply {
+            anchor = GridBagConstraints.WEST
+            insets = Insets(0, 0, 0, 8)
+        }
+
+        infoPanel.add(JBLabel("#$commentId").apply {
+            font = JBFont.regular().asBold()
+        }, gbc)
+
+        comment?.let { c ->
+            val statusColor = getStatusColor(c.status)
+            infoPanel.add(createTagLabel(c.status.jsonValue, statusColor), gbc)
+
+            c.firstUserMessage?.let { msg ->
+                // Use a label that truncates based on available width
+                val singleLine = msg.replace("\n", " ").replace("\r", " ").replace("  ", " ")
+
+                gbc.weightx = 1.0
+                gbc.fill = GridBagConstraints.HORIZONTAL
+                infoPanel.add(createClickableCommentLabel(singleLine, msg), gbc)
+            }
+        }
+
+        // Right side: Actions - use GridBagLayout for vertical centering
+        val actionsPanel = JPanel(GridBagLayout()).apply {
+            isOpaque = false
+        }
+
+        val actionGbc = GridBagConstraints().apply {
+            anchor = GridBagConstraints.CENTER
+            insets = Insets(0, 4, 0, 4)
+        }
+
+        // Get list of fixed comments for navigation
+        val fixedComments = reviewData?.comments
+            ?.filter { it.status == CommentStatus.FIXED }
+            ?.sortedBy { it.id }
+            ?: emptyList()
+
+        val currentIndex = fixedComments.indexOfFirst { it.id == commentId }
+        val hasNavigation = fixedComments.size > 1
+
+        // Separator before navigation/resolve
+        actionsPanel.add(createVerticalSeparator(), actionGbc)
+
+        if (hasNavigation) {
+            // Navigation label
+            actionsPanel.add(JBLabel("Comment ${currentIndex + 1}/${fixedComments.size}").apply {
+                foreground = JBColor.GRAY
+                font = JBFont.small()
+            }, actionGbc)
+
+            // Previous icon button
+            actionsPanel.add(InlineIconButton(
+                AllIcons.Actions.PreviousOccurence,
+                AllIcons.Actions.PreviousOccurence
+            ).apply {
+                isEnabled = currentIndex > 0
+                actionListener = java.awt.event.ActionListener {
+                    if (currentIndex > 0) {
+                        val prevComment = fixedComments[currentIndex - 1]
+                        prevComment.resolveCommit?.let { commit ->
+                            com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, prevComment.file, prevComment.id)
+                            SwingUtilities.getWindowAncestor(this)?.dispose()
+                        }
+                    }
+                }
+            }, actionGbc)
+
+            // Next icon button
+            actionsPanel.add(InlineIconButton(
+                AllIcons.Actions.NextOccurence,
+                AllIcons.Actions.NextOccurence
+            ).apply {
+                isEnabled = currentIndex < fixedComments.size - 1
+                actionListener = java.awt.event.ActionListener {
+                    if (currentIndex < fixedComments.size - 1) {
+                        val nextComment = fixedComments[currentIndex + 1]
+                        nextComment.resolveCommit?.let { commit ->
+                            com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, nextComment.file, nextComment.id)
+                            SwingUtilities.getWindowAncestor(this)?.dispose()
+                        }
+                    }
+                }
+            }, actionGbc)
+
+        }
+
+        // Resolve button - reduce right inset to match top bar
+        actionGbc.insets = Insets(0, 4, 0, 0)
+        actionsPanel.add(JButton("Resolve").apply {
+            icon = AllIcons.Actions.Checked
+            toolTipText = "Mark comment as resolved"
+            isEnabled = comment?.status == CommentStatus.FIXED
+            addActionListener {
+                reviewService.updateCommentStatus(commentId, CommentStatus.RESOLVED)
+                onResolve()
+            }
+        }, actionGbc)
+
+        panel.add(infoPanel, BorderLayout.CENTER)
+        panel.add(actionsPanel, BorderLayout.EAST)
+
+        return panel
     }
 
     private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, basePath: String) {
@@ -504,6 +664,104 @@ class DiffCommentExtension : DiffExtension() {
                 g2.fillRoundRect(0, 0, width, height, 10, 10)
                 g2.dispose()
                 super.paintComponent(g)
+            }
+        }
+    }
+
+    private fun createClickableCommentLabel(displayText: String, fullText: String): JComponent {
+        val label = object : JBLabel(displayText) {
+            private var lastWidth = -1
+            private var cachedText = displayText
+
+            init {
+                foreground = JBColor.GRAY
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+                addMouseListener(object : java.awt.event.MouseAdapter() {
+                    override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                        showCommentPopup(fullText, e.component)
+                    }
+
+                    override fun mouseEntered(e: java.awt.event.MouseEvent) {
+                        foreground = JBColor.BLUE
+                    }
+
+                    override fun mouseExited(e: java.awt.event.MouseEvent) {
+                        foreground = JBColor.GRAY
+                    }
+                })
+            }
+
+            override fun setBounds(x: Int, y: Int, width: Int, height: Int) {
+                super.setBounds(x, y, width, height)
+                // Recalculate truncation only when width changes
+                if (width != lastWidth && width > 0) {
+                    lastWidth = width
+                    cachedText = truncateToFit(displayText, width)
+                    text = cachedText
+                }
+            }
+
+            private fun truncateToFit(text: String, availableWidth: Int): String {
+                val fm = getFontMetrics(font)
+                val fullWidth = fm.stringWidth(text)
+                if (fullWidth <= availableWidth) return text
+
+                val ellipsis = "..."
+                val ellipsisWidth = fm.stringWidth(ellipsis)
+                var truncated = text
+
+                while (fm.stringWidth(truncated) + ellipsisWidth > availableWidth && truncated.isNotEmpty()) {
+                    truncated = truncated.dropLast(1)
+                }
+
+                return truncated + ellipsis
+            }
+        }
+
+        return JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(label, BorderLayout.CENTER)
+        }
+    }
+
+    private fun showCommentPopup(text: String, component: java.awt.Component) {
+        val textArea = JBTextArea(text).apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            background = UIUtil.getToolTipBackground()
+            foreground = UIUtil.getToolTipForeground()
+            border = JBUI.Borders.empty(12)
+            columns = 60
+            rows = minOf(text.lines().size + 1, 12)
+        }
+
+        val scrollPane = JBScrollPane(textArea).apply {
+            border = JBUI.Borders.empty()
+            preferredSize = Dimension(500, minOf(textArea.preferredSize.height + 24, 250))
+        }
+
+        JBPopupFactory.getInstance()
+            .createComponentPopupBuilder(scrollPane, textArea)
+            .setRequestFocus(false)
+            .setFocusable(false)
+            .setMovable(false)
+            .setResizable(false)
+            .createPopup()
+            .showUnderneathOf(component)
+    }
+
+    private fun createVerticalSeparator(): JComponent {
+        return object : JComponent() {
+            init {
+                preferredSize = Dimension(1, 16)
+                minimumSize = preferredSize
+            }
+
+            override fun paintComponent(g: Graphics) {
+                g.color = JBColor(Color(0, 0, 0, 60), Color(255, 255, 255, 60))
+                g.fillRect(0, 2, 1, height - 4)
             }
         }
     }
