@@ -11,7 +11,7 @@ describe('show command', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-    reviewPath = path.join(tempDir, '.review', 'comments.json');
+    reviewPath = path.join(tempDir, '.review-duet', 'main.json');
     fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
   });
 
@@ -40,7 +40,7 @@ describe('show command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     const output = showComment(store, 1);
 
     expect(output).toContain('Comment #1');
@@ -60,7 +60,7 @@ describe('show command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     const output = showComment(store, 1);
 
     expect(output).toContain('git show abc1234:src/Example.php');
@@ -74,7 +74,7 @@ describe('show command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     expect(() => showComment(store, 999)).toThrow('Comment #999 not found');
   });
 });

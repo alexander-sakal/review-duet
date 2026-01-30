@@ -11,7 +11,7 @@ describe('fix command', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-    reviewPath = path.join(tempDir, '.review', 'comments.json');
+    reviewPath = path.join(tempDir, '.review-duet', 'main.json');
     fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-23T12:00:00Z'));
@@ -32,7 +32,7 @@ describe('fix command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     markAsFixed(store, 1, 'abc1234');
 
     const updated = JSON.parse(fs.readFileSync(reviewPath, 'utf-8'));
@@ -50,7 +50,7 @@ describe('fix command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     markAsFixed(store, 1, 'abc1234');
 
     const updated = JSON.parse(fs.readFileSync(reviewPath, 'utf-8'));
@@ -66,7 +66,7 @@ describe('fix command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     expect(() => markAsFixed(store, 999, 'abc')).toThrow('Comment #999 not found');
   });
 
@@ -80,7 +80,7 @@ describe('fix command', () => {
     };
     fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-    const store = new ReviewStore(tempDir);
+    const store = new ReviewStore(reviewPath);
     markAsFixed(store, 1, 'abc1234', 'Refactored the function to handle edge cases');
 
     const updated = JSON.parse(fs.readFileSync(reviewPath, 'utf-8'));

@@ -8,10 +8,12 @@ import { execSync } from 'child_process';
 
 describe('acceptChanges', () => {
   let testDir: string;
+  let reviewPath: string;
   let store: ReviewStore;
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
+    reviewPath = path.join(testDir, '.review-duet', 'main.json');
 
     // Initialize git repo
     execSync('git init', { cwd: testDir });
@@ -23,7 +25,7 @@ describe('acceptChanges', () => {
     execSync('git add .', { cwd: testDir });
     execSync('git commit -m "initial"', { cwd: testDir });
 
-    store = new ReviewStore(testDir);
+    store = new ReviewStore(reviewPath);
   });
 
   afterEach(() => {
@@ -34,9 +36,9 @@ describe('acceptChanges', () => {
     const initialCommit = execSync('git rev-parse HEAD', { cwd: testDir, encoding: 'utf-8' }).trim();
 
     // Create review with old base
-    const reviewDir = path.join(testDir, '.review');
-    fs.mkdirSync(reviewDir);
-    fs.writeFileSync(path.join(reviewDir, 'comments.json'), JSON.stringify({
+    const reviewDir = path.join(testDir, '.review-duet');
+    fs.mkdirSync(reviewDir, { recursive: true });
+    fs.writeFileSync(path.join(reviewDir, 'main.json'), JSON.stringify({
       version: 1,
       baseCommit: 'old-commit-sha',
       comments: [],
@@ -54,9 +56,9 @@ describe('acceptChanges', () => {
   it('returns message when already at HEAD', () => {
     const currentHead = execSync('git rev-parse HEAD', { cwd: testDir, encoding: 'utf-8' }).trim();
 
-    const reviewDir = path.join(testDir, '.review');
-    fs.mkdirSync(reviewDir);
-    fs.writeFileSync(path.join(reviewDir, 'comments.json'), JSON.stringify({
+    const reviewDir = path.join(testDir, '.review-duet');
+    fs.mkdirSync(reviewDir, { recursive: true });
+    fs.writeFileSync(path.join(reviewDir, 'main.json'), JSON.stringify({
       version: 1,
       baseCommit: currentHead,
       comments: []

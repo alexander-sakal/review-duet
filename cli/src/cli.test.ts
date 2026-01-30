@@ -10,7 +10,7 @@ describe('CLI', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-    reviewPath = path.join(tempDir, '.review', 'comments.json');
+    reviewPath = path.join(tempDir, '.review-duet', 'main.json');
     fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
   });
 
@@ -55,7 +55,7 @@ describe('CLI', () => {
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const output = runCli(['list'], tempDir);
+      const output = runCli(['list', `--review=${reviewPath}`], tempDir);
       expect(output).toContain('#1');
     });
   });

@@ -11,7 +11,7 @@ describe('list command', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-    reviewPath = path.join(tempDir, '.review', 'comments.json');
+    reviewPath = path.join(tempDir, '.review-duet', 'main.json');
     fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
   });
 
@@ -53,7 +53,7 @@ describe('list command', () => {
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       const output = listComments(store);
 
       expect(output).toContain('#1');
@@ -71,7 +71,7 @@ describe('list command', () => {
       };
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       const output = listComments(store, { status: 'open' });
 
       expect(output).toContain('#1');

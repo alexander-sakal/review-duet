@@ -10,7 +10,7 @@ describe('ReviewStore', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
-    reviewPath = path.join(tempDir, '.review', 'comments.json');
+    reviewPath = path.join(tempDir, '.review-duet', 'main.json');
   });
 
   afterEach(() => {
@@ -28,7 +28,7 @@ describe('ReviewStore', () => {
       fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       const loaded = store.load();
 
       expect(loaded.version).toBe(1);
@@ -36,14 +36,14 @@ describe('ReviewStore', () => {
     });
 
     it('should throw if no review file exists', () => {
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       expect(() => store.load()).toThrow('No active review');
     });
   });
 
   describe('save', () => {
     it('should save review data to file', () => {
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       const data = {
         version: 1,
         baseCommit: 'abc1234',
@@ -71,7 +71,7 @@ describe('ReviewStore', () => {
       fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       const comment = store.getComment(2);
 
       expect(comment?.line).toBe(20);
@@ -87,7 +87,7 @@ describe('ReviewStore', () => {
       fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
       fs.writeFileSync(reviewPath, JSON.stringify(data));
 
-      const store = new ReviewStore(tempDir);
+      const store = new ReviewStore(reviewPath);
       expect(store.getComment(999)).toBeUndefined();
     });
   });
