@@ -4,11 +4,13 @@ import com.codereview.local.model.CommentStatus
 import com.codereview.local.model.CommitInfo
 import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.nio.file.Path
@@ -16,6 +18,7 @@ import javax.swing.BoxLayout
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
 import javax.swing.JComboBox
+import javax.swing.JPanel
 import com.intellij.ui.components.JBTabbedPane
 import javax.swing.JSeparator
 import javax.swing.SwingConstants
@@ -120,14 +123,25 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             val selectLabel = JBLabel("Review changes starting from:")
             add(selectLabel, gbc)
 
-            // Commit dropdown
+            // Commit dropdown with refresh button
             gbc.gridy++
             gbc.insets = JBUI.insets(5)
             val commits = gitService.getRecentCommits(25)
             commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
                 if (commits.isNotEmpty()) selectedIndex = 0
             }
-            add(commitComboBox, gbc)
+
+            val refreshButton = JButton(AllIcons.Actions.Refresh).apply {
+                toolTipText = "Refresh commits"
+                addActionListener { refresh() }
+            }
+
+            val commitPanel = JPanel(FlowLayout(FlowLayout.CENTER, 5, 0)).apply {
+                isOpaque = false
+                add(commitComboBox)
+                add(refreshButton)
+            }
+            add(commitPanel, gbc)
 
             // Start button
             gbc.gridy++
