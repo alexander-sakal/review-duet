@@ -26,14 +26,32 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
     }
 
-    private val reviewService: ReviewService by lazy { ReviewService(basePath) }
-    private val gitService: GitService by lazy { GitService(basePath) }
     private val changesPanel: ChangesPanel by lazy { ChangesPanel(project, gitService) }
     private var commitComboBox: JComboBox<CommitInfo>? = null
     private var selectedTabIndex: Int = 0
 
+    private var availableRepos: List<Path> = emptyList()
+    private var selectedRepoPath: Path = basePath
+    private var repoComboBox: JComboBox<String>? = null
+
+    private var reviewService: ReviewService = ReviewService(basePath)
+    private var gitService: GitService = GitService(basePath)
+
     init {
         border = JBUI.Borders.empty(10, 0)
+        availableRepos = GitService.discoverRepos(basePath)
+        if (availableRepos.isNotEmpty()) {
+            selectedRepoPath = availableRepos.first()
+            reviewService = ReviewService(selectedRepoPath)
+            gitService = GitService(selectedRepoPath)
+        }
+        refresh()
+    }
+
+    private fun onRepoSelected(repoPath: Path) {
+        selectedRepoPath = repoPath
+        reviewService = ReviewService(repoPath)
+        gitService = GitService(repoPath)
         refresh()
     }
 
@@ -60,38 +78,62 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val centerPanel = JBPanel<JBPanel<*>>().apply {
             layout = GridBagLayout()
 
-            val label = JBLabel("No active review").apply {
-                horizontalAlignment = SwingConstants.CENTER
-            }
-
-            val selectLabel = JBLabel("Review changes starting from:")
-
-            val commits = gitService.getRecentCommits(25)
-            commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
-                if (commits.isNotEmpty()) selectedIndex = 0
-            }
-
-            val button = JButton("Start Review").apply {
-                addActionListener { startReview() }
-            }
-
             val gbc = GridBagConstraints().apply {
                 gridx = 0
                 gridy = 0
                 insets = JBUI.insets(5)
                 fill = GridBagConstraints.HORIZONTAL
             }
-            add(label, gbc)
 
-            gbc.gridy = 1
+            // Repo selector (only if multiple repos)
+            if (availableRepos.size > 1) {
+                val repoLabel = JBLabel("Repository:")
+                add(repoLabel, gbc)
+
+                gbc.gridy = 1
+                val repoNames = availableRepos.map { it.fileName.toString() }.toTypedArray()
+                repoComboBox = JComboBox(DefaultComboBoxModel(repoNames)).apply {
+                    selectedItem = selectedRepoPath.fileName.toString()
+                    addActionListener {
+                        val selectedName = selectedItem as? String ?: return@addActionListener
+                        val repo = availableRepos.find { it.fileName.toString() == selectedName }
+                        if (repo != null && repo != selectedRepoPath) {
+                            onRepoSelected(repo)
+                        }
+                    }
+                }
+                add(repoComboBox, gbc)
+                gbc.gridy = 2
+                gbc.insets = JBUI.insets(10, 5, 5, 5)
+            }
+
+            // Branch display
+            val currentBranch = gitService.getCurrentBranch() ?: "unknown"
+            val branchLabel = JBLabel("Branch: $currentBranch").apply {
+                horizontalAlignment = SwingConstants.CENTER
+            }
+            add(branchLabel, gbc)
+
+            // Commit selector label
+            gbc.gridy++
             gbc.insets = JBUI.insets(15, 5, 5, 5)
+            val selectLabel = JBLabel("Review changes starting from:")
             add(selectLabel, gbc)
 
-            gbc.gridy = 2
+            // Commit dropdown
+            gbc.gridy++
             gbc.insets = JBUI.insets(5)
+            val commits = gitService.getRecentCommits(25)
+            commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
+                if (commits.isNotEmpty()) selectedIndex = 0
+            }
             add(commitComboBox, gbc)
 
-            gbc.gridy = 3
+            // Start button
+            gbc.gridy++
+            val button = JButton("Start Review").apply {
+                addActionListener { startReview() }
+            }
             add(button, gbc)
         }
 
