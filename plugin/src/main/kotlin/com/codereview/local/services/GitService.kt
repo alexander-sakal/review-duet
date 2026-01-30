@@ -5,8 +5,36 @@ import com.codereview.local.model.ChangedFile
 import com.codereview.local.model.CommitInfo
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.exists
 
 class GitService(private val projectRoot: Path) {
+
+    companion object {
+        /**
+         * Find all git repositories within a project directory.
+         * Returns list of paths to repo roots (directories containing .git).
+         */
+        fun discoverRepos(projectRoot: Path): List<Path> {
+            val repos = mutableListOf<Path>()
+
+            // Check if project root itself is a repo
+            if (projectRoot.resolve(".git").exists()) {
+                repos.add(projectRoot)
+            }
+
+            // Search for nested repos (one level deep for performance)
+            projectRoot.toFile().listFiles()?.forEach { file ->
+                if (file.isDirectory && !file.name.startsWith(".")) {
+                    val nestedGit = file.toPath().resolve(".git")
+                    if (nestedGit.exists()) {
+                        repos.add(file.toPath())
+                    }
+                }
+            }
+
+            return repos.sortedBy { it.fileName.toString() }
+        }
+    }
 
     fun createTag(tagName: String): Boolean {
         return runGitCommand("tag", tagName) == 0
