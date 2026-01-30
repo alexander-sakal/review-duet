@@ -29,6 +29,8 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.Rectangle
+import java.awt.Window
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.nio.file.Path
@@ -48,18 +50,18 @@ class ChangesPanel(
         /**
          * Open diff view showing changes in a single commit (commit^ to commit)
          */
-        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null) {
+        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null, windowBounds: Rectangle? = null) {
             val basePath = Path.of(project.basePath ?: return)
             val gitService = GitService(basePath)
 
             val parentCommit = gitService.getParentCommitSha(commitSha) ?: return
-            openDiffBetweenCommits(project, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId)
+            openDiffBetweenCommits(project, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId, windowBounds = windowBounds)
         }
 
         /**
          * Open diff view showing changes between two commits
          */
-        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null) {
+        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null, windowBounds: Rectangle? = null) {
             val basePath = Path.of(project.basePath ?: return)
             val gitService = GitService(basePath)
 
@@ -121,6 +123,17 @@ class ChangesPanel(
             }
 
             DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+
+            // Restore window position if provided
+            if (windowBounds != null) {
+                SwingUtilities.invokeLater {
+                    // Find the most recently opened diff window
+                    Window.getWindows()
+                        .filterIsInstance<JFrame>()
+                        .lastOrNull { it.isVisible && it.title?.contains(toCommit.take(7)) == true }
+                        ?.bounds = windowBounds
+                }
+            }
         }
     }
 

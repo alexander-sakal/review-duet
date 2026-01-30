@@ -10,6 +10,7 @@ import com.intellij.diff.requests.DiffRequest
 import com.intellij.diff.tools.util.side.TwosideTextDiffViewer
 import com.intellij.diff.tools.util.base.DiffViewerBase
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -171,66 +172,90 @@ class DiffCommentExtension : DiffExtension() {
             ?.sortedBy { it.id }
             ?: emptyList()
 
-        val currentIndex = fixedComments.indexOfFirst { it.id == commentId }
-        val hasNavigation = fixedComments.size > 1
-
-        // Separator before navigation/resolve
+        // Separator before actions
         actionsPanel.add(createVerticalSeparator(), actionGbc)
 
-        if (hasNavigation) {
-            // Navigation label
-            actionsPanel.add(JBLabel("Comment ${currentIndex + 1}/${fixedComments.size}").apply {
-                foreground = JBColor.GRAY
-                font = JBFont.small()
-            }, actionGbc)
+        // Show remaining count - always visible
+        val remainingLabel = JBLabel("${fixedComments.size} remaining").apply {
+            foreground = JBColor.GRAY
+            font = JBFont.small()
+        }
+        actionsPanel.add(remainingLabel, actionGbc)
 
-            // Previous icon button
-            actionsPanel.add(InlineIconButton(
-                AllIcons.Actions.PreviousOccurence,
-                AllIcons.Actions.PreviousOccurence
-            ).apply {
-                isEnabled = currentIndex > 0
-                actionListener = java.awt.event.ActionListener {
-                    if (currentIndex > 0) {
-                        val prevComment = fixedComments[currentIndex - 1]
-                        prevComment.resolveCommit?.let { commit ->
-                            com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, prevComment.file, prevComment.id)
-                            SwingUtilities.getWindowAncestor(this)?.dispose()
-                        }
-                    }
-                }
-            }, actionGbc)
+        // Create Resolve and Next buttons - both visible simultaneously
+        actionGbc.insets = Insets(0, 4, 0, 0)
 
-            // Next icon button
-            actionsPanel.add(InlineIconButton(
-                AllIcons.Actions.NextOccurence,
-                AllIcons.Actions.NextOccurence
-            ).apply {
-                isEnabled = currentIndex < fixedComments.size - 1
-                actionListener = java.awt.event.ActionListener {
-                    if (currentIndex < fixedComments.size - 1) {
-                        val nextComment = fixedComments[currentIndex + 1]
-                        nextComment.resolveCommit?.let { commit ->
-                            com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, nextComment.file, nextComment.id)
-                            SwingUtilities.getWindowAncestor(this)?.dispose()
-                        }
-                    }
-                }
-            }, actionGbc)
-
+        // Helper to update button icon based on enabled state
+        fun updateButtonIcon(button: JButton, icon: Icon) {
+            button.icon = if (button.isEnabled) icon else IconLoader.getDisabledIcon(icon)
         }
 
-        // Resolve button - reduce right inset to match top bar
-        actionGbc.insets = Insets(0, 4, 0, 0)
-        actionsPanel.add(JButton("Resolve").apply {
-            icon = AllIcons.Actions.Checked
+        val resolveIcon = AllIcons.Actions.Checked
+        val nextIcon = AllIcons.Actions.NextOccurence
+
+        lateinit var nextButton: JButton
+
+        val resolveButton = JButton("Resolve").apply {
+            icon = if (comment?.status == CommentStatus.FIXED) resolveIcon else IconLoader.getDisabledIcon(resolveIcon)
             toolTipText = "Mark comment as resolved"
             isEnabled = comment?.status == CommentStatus.FIXED
             addActionListener {
                 reviewService.updateCommentStatus(commentId, CommentStatus.RESOLVED)
-                onResolve()
+
+                // Update remaining count
+                val updatedData = reviewService.loadReviewData()
+                val remainingComments = updatedData?.comments
+                    ?.filter { it.status == CommentStatus.FIXED }
+                    ?: emptyList()
+
+                // Update UI
+                isEnabled = false
+                icon = IconLoader.getDisabledIcon(resolveIcon)
+                remainingLabel.text = "${remainingComments.size} remaining"
+
+                // Close window if no more comments, otherwise disable next
+                if (remainingComments.isEmpty()) {
+                    onResolve()
+                } else {
+                    // Keep next enabled for navigation to other comments
+                }
             }
-        }, actionGbc)
+        }
+
+        nextButton = JButton("Next").apply {
+            // Enable if there are other fixed comments besides the current one
+            val hasNext = fixedComments.size > 1 || (fixedComments.size == 1 && fixedComments.first().id != commentId)
+            icon = if (hasNext) nextIcon else IconLoader.getDisabledIcon(nextIcon)
+            toolTipText = "Go to next comment"
+            isEnabled = hasNext
+            addActionListener {
+                val updatedData = reviewService.loadReviewData()
+                val remainingComments = updatedData?.comments
+                    ?.filter { it.status == CommentStatus.FIXED }
+                    ?.sortedBy { it.id }
+                    ?: emptyList()
+
+                if (remainingComments.isNotEmpty()) {
+                    // Find next comment (after current, or wrap to first)
+                    val currentIndex = remainingComments.indexOfFirst { it.id == commentId }
+                    val nextComment = if (currentIndex >= 0 && currentIndex < remainingComments.size - 1) {
+                        remainingComments[currentIndex + 1]
+                    } else {
+                        remainingComments.first()
+                    }
+
+                    nextComment.resolveCommit?.let { commit ->
+                        val window = SwingUtilities.getWindowAncestor(this)
+                        val bounds = window?.bounds
+                        com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, nextComment.file, nextComment.id, bounds)
+                        window?.dispose()
+                    }
+                }
+            }
+        }
+
+        actionsPanel.add(resolveButton, actionGbc)
+        actionsPanel.add(nextButton, actionGbc)
 
         panel.add(infoPanel, BorderLayout.CENTER)
         panel.add(actionsPanel, BorderLayout.EAST)
