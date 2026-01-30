@@ -486,6 +486,7 @@ class DiffCommentExtension : DiffExtension() {
         }.apply {
             isOpaque = true
             background = bgColor
+            cursor = Cursor.getDefaultCursor()
             border = BorderFactory.createCompoundBorder(
                 RoundedLineBorder(borderColor, 8, 1),
                 JBUI.Borders.empty(inlayPadding)
@@ -515,6 +516,7 @@ class DiffCommentExtension : DiffExtension() {
             AllIcons.General.Inline_edit,
             AllIcons.General.Inline_edit_hovered
         ).apply {
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             actionListener = java.awt.event.ActionListener { onEdit() }
         }
         actionsPanel.add(editButton)
@@ -523,6 +525,7 @@ class DiffCommentExtension : DiffExtension() {
             AllIcons.Actions.GC,
             AllIcons.Actions.GC
         ).apply {
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             actionListener = java.awt.event.ActionListener {
                 val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
                     "Delete this comment?",
@@ -563,6 +566,7 @@ class DiffCommentExtension : DiffExtension() {
                 foreground = fgColor
                 font = UIUtil.getLabelFont()
                 border = JBUI.Borders.empty()
+                cursor = Cursor.getDefaultCursor()
             }
             contentPanel.add(textPane)
         }
@@ -607,6 +611,7 @@ class DiffCommentExtension : DiffExtension() {
         val panel = JPanel(BorderLayout()).apply {
             isOpaque = true
             background = bgColor
+            cursor = Cursor.getDefaultCursor()
             border = BorderFactory.createCompoundBorder(
                 RoundedLineBorder(borderColor, 8, 1),
                 JBUI.Borders.empty(inlayPadding)
