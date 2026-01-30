@@ -209,18 +209,24 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     }
 
     private fun endReview() {
+        val branch = gitService.getCurrentBranch() ?: "unknown"
         val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
             project,
-            "End this review session? The .review folder will be deleted.",
+            "End this review session? The review file for branch '$branch' will be deleted.",
             "End Review",
             com.intellij.openapi.ui.Messages.getQuestionIcon()
         )
         if (result != com.intellij.openapi.ui.Messages.YES) return
 
-        // Delete .review folder
-        val reviewDir = basePath.resolve(".review").toFile()
-        if (reviewDir.exists()) {
-            reviewDir.deleteRecursively()
+        // Delete review file for current branch
+        val reviewFile = basePath.resolve(".review-duet").resolve("$branch.json").toFile()
+        if (reviewFile.exists()) {
+            reviewFile.delete()
+        }
+        // Clean up empty directory
+        val reviewDir = basePath.resolve(".review-duet").toFile()
+        if (reviewDir.exists() && reviewDir.listFiles()?.isEmpty() == true) {
+            reviewDir.delete()
         }
         refresh()
     }
