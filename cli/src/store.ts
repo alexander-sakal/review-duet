@@ -6,8 +6,8 @@ export class ReviewStore {
   private readonly reviewPath: string;
   private data: ReviewData | null = null;
 
-  constructor(projectRoot: string) {
-    this.reviewPath = path.join(projectRoot, '.review', 'comments.json');
+  constructor(reviewPath: string) {
+    this.reviewPath = reviewPath;
   }
 
   load(): ReviewData {
