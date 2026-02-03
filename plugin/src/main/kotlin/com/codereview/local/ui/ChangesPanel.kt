@@ -137,10 +137,7 @@ class ChangesPanel(
         }
     }
 
-    private val basePath: Path by lazy {
-        Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
-    }
-    private val reviewService: ReviewService by lazy { ReviewService(basePath) }
+    private val reviewService: ReviewService by lazy { ReviewService(gitService.projectRoot) }
 
     private val rootNode = DefaultMutableTreeNode("Changes")
     private val treeModel = DefaultTreeModel(rootNode)

@@ -9,7 +9,7 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.exists
 
-class GitService(private val projectRoot: Path) {
+class GitService(val projectRoot: Path) {
 
     companion object {
         /**

@@ -31,7 +31,6 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         Path.of(project.basePath ?: throw IllegalStateException("No project base path"))
     }
 
-    private val changesPanel: ChangesPanel by lazy { ChangesPanel(project, gitService) }
     private var commitComboBox: JComboBox<CommitInfo>? = null
     private var selectedTabIndex: Int = 0
 
@@ -41,6 +40,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private var reviewService: ReviewService = ReviewService(basePath)
     private var gitService: GitService = GitService(basePath)
+    private var changesPanel: ChangesPanel = ChangesPanel(project, gitService)
 
     init {
         border = JBUI.Borders.empty(10, 0)
@@ -66,6 +66,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             }
             reviewService = ReviewService(selectedRepoPath)
             gitService = GitService(selectedRepoPath)
+            changesPanel = ChangesPanel(project, gitService)
         }
     }
 
@@ -73,6 +74,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         selectedRepoPath = repoPath
         reviewService = ReviewService(repoPath)
         gitService = GitService(repoPath)
+        changesPanel = ChangesPanel(project, gitService)
         refresh()
     }
 
