@@ -322,12 +322,12 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         if (result != com.intellij.openapi.ui.Messages.YES) return
 
         // Delete review file for current branch
-        val reviewFile = basePath.resolve(".review-duet").resolve("$branch.json").toFile()
+        val reviewFile = selectedRepoPath.resolve(".review-duet").resolve("$branch.json").toFile()
         if (reviewFile.exists()) {
             reviewFile.delete()
         }
         // Clean up empty directory
-        val reviewDir = basePath.resolve(".review-duet").toFile()
+        val reviewDir = selectedRepoPath.resolve(".review-duet").toFile()
         if (reviewDir.exists() && reviewDir.listFiles()?.isEmpty() == true) {
             reviewDir.delete()
         }
