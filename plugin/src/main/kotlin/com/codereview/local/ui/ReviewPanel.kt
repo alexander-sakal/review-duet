@@ -97,8 +97,9 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             val gbc = GridBagConstraints().apply {
                 gridx = 0
                 gridy = 0
-                insets = JBUI.insets(5)
+                insets = JBUI.insets(5, 10, 5, 10)
                 fill = GridBagConstraints.HORIZONTAL
+                weightx = 1.0
             }
 
             // Repo display/selector
