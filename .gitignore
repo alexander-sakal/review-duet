@@ -19,4 +19,7 @@ Thumbs.db
 
 # Logs
 *.log
-intellij-community
+
+# Local
+intellij-community/
+.claude/
