@@ -42,7 +42,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     init {
         border = JBUI.Borders.empty(10, 0)
-        availableRepos = GitService.discoverRepos(basePath)
+        availableRepos = GitService.discoverRepos(project)
         if (availableRepos.isNotEmpty()) {
             selectedRepoPath = availableRepos.first()
             reviewService = ReviewService(selectedRepoPath)
