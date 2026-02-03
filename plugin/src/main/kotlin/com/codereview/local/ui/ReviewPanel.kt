@@ -78,6 +78,19 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     }
 
     private fun showNoReviewPanel() {
+        // Handle no repos found case
+        if (availableRepos.isEmpty()) {
+            val errorPanel = JBPanel<JBPanel<*>>().apply {
+                layout = GridBagLayout()
+                val errorLabel = JBLabel("No git repository found").apply {
+                    horizontalAlignment = SwingConstants.CENTER
+                }
+                add(errorLabel)
+            }
+            add(errorPanel, BorderLayout.CENTER)
+            return
+        }
+
         val centerPanel = JBPanel<JBPanel<*>>().apply {
             layout = GridBagLayout()
 
@@ -88,8 +101,9 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 fill = GridBagConstraints.HORIZONTAL
             }
 
-            // Repo selector (only if multiple repos)
+            // Repo display/selector
             if (availableRepos.size > 1) {
+                // Multiple repos: show dropdown selector
                 val repoLabel = JBLabel("Repository:")
                 add(repoLabel, gbc)
 
@@ -108,6 +122,15 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 add(repoComboBox, gbc)
                 gbc.gridy = 2
                 gbc.insets = JBUI.insets(10, 5, 5, 5)
+            } else {
+                // Single repo: show name as label
+                val repoName = selectedRepoPath.fileName.toString()
+                val repoLabel = JBLabel("Repository: $repoName").apply {
+                    horizontalAlignment = SwingConstants.CENTER
+                }
+                add(repoLabel, gbc)
+                gbc.gridy = 1
+                gbc.insets = JBUI.insets(5)
             }
 
             // Branch display
