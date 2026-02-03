@@ -46,7 +46,6 @@
                 text="Open Review Diff"
                 description="Open diff view with review comments">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            <add-to-group group-id="VcsGroup" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt R"/>
         </action>
         <group id="CodeReview.DiffToolbarGroup">
