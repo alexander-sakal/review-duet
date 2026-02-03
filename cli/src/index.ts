@@ -48,6 +48,21 @@ function getReviewPath(options: Record<string, string>, cwd: string): string {
   return `${cwd}/.review-duet/${branch}.json`;
 }
 
+/**
+ * Extract the repo root from a review file path.
+ * e.g., /code/myproject/.review-duet/main.json -> /code/myproject
+ */
+function getRepoRootFromReviewPath(reviewPath: string): string {
+  // Review path format: <repo-root>/.review-duet/<branch>.json
+  const reviewDuetIndex = reviewPath.lastIndexOf('/.review-duet/');
+  if (reviewDuetIndex !== -1) {
+    return reviewPath.substring(0, reviewDuetIndex);
+  }
+  // Fallback: use directory of the file
+  const path = require('path');
+  return path.dirname(path.dirname(reviewPath));
+}
+
 export function runCli(argv: string[], cwd: string = process.cwd()): string {
   const { command, args, options } = parseArgs(argv);
   const reviewPath = getReviewPath(options, cwd);
@@ -79,7 +94,8 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
     }
 
     case 'accept': {
-      return acceptChanges(store, cwd);
+      const repoRoot = getRepoRootFromReviewPath(reviewPath);
+      return acceptChanges(store, repoRoot);
     }
 
     case 'help':
@@ -87,13 +103,14 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
       return `review-duet CLI - Code review helper for Claude Code
 
 Usage:
-  review-duet list [--status=<status>] [--review=<path>]   List comments
-  review-duet fix <id> --commit <sha> [--message]          Mark as fixed
-  review-duet show <id>                                    Show comment details
-  review-duet accept                                       Accept changes, move baseline to HEAD
+  review-duet list [--status=<status>]        List comments
+  review-duet fix <id> --commit <sha> [--message "<text>"]  Mark as fixed
+  review-duet show <id>                       Show comment details
+  review-duet accept                          Accept changes, move baseline to HEAD
 
-Options:
+Global Options:
   --review=<path>  Explicit path to review file (default: .review-duet/{branch}.json)
+                   All commands support this flag.
 
 Statuses: open, fixed, resolved`;
   }

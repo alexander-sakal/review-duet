@@ -103,23 +103,23 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         if (availableRepos.isEmpty()) {
             val errorPanel = JBPanel<JBPanel<*>>().apply {
                 layout = GridBagLayout()
-                val errorLabel = JBLabel("No git repository found").apply {
-                    horizontalAlignment = SwingConstants.CENTER
-                }
+                val errorLabel = JBLabel("No git repository found")
                 add(errorLabel)
             }
             add(errorPanel, BorderLayout.CENTER)
             return
         }
 
-        val centerPanel = JBPanel<JBPanel<*>>().apply {
+        // Content panel with fixed max width
+        val contentPanel = JBPanel<JBPanel<*>>().apply {
             layout = GridBagLayout()
 
             val gbc = GridBagConstraints().apply {
                 gridx = 0
                 gridy = 0
-                insets = JBUI.insets(5, 10, 5, 10)
+                insets = JBUI.insets(5, 0, 5, 0)
                 fill = GridBagConstraints.HORIZONTAL
+                anchor = GridBagConstraints.WEST
                 weightx = 1.0
             }
 
@@ -143,55 +143,35 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 }
                 add(repoComboBox, gbc)
                 gbc.gridy = 2
-                gbc.insets = JBUI.insets(10, 5, 5, 5)
+                gbc.insets = JBUI.insets(10, 0, 5, 0)
             } else {
                 // Single repo: show name as label
                 val repoName = selectedRepoPath.fileName.toString()
-                val repoLabel = JBLabel("Repository: $repoName").apply {
-                    horizontalAlignment = SwingConstants.CENTER
-                }
+                val repoLabel = JBLabel("Repository: $repoName")
                 add(repoLabel, gbc)
                 gbc.gridy = 1
-                gbc.insets = JBUI.insets(5)
+                gbc.insets = JBUI.insets(5, 0, 5, 0)
             }
 
             // Branch display
             val currentBranch = gitService.getCurrentBranch() ?: "unknown"
-            val branchLabel = JBLabel("Branch: $currentBranch").apply {
-                horizontalAlignment = SwingConstants.CENTER
-            }
+            val branchLabel = JBLabel("Branch: $currentBranch")
             add(branchLabel, gbc)
 
             // Commit selector label
             gbc.gridy++
-            gbc.insets = JBUI.insets(15, 5, 5, 5)
+            gbc.insets = JBUI.insets(15, 0, 5, 0)
             val selectLabel = JBLabel("Review changes starting from:")
             add(selectLabel, gbc)
 
-            // Commit dropdown with refresh button
+            // Commit dropdown
             gbc.gridy++
-            gbc.insets = JBUI.insets(5)
-            val commits = gitService.getRecentCommits(25)
+            gbc.insets = JBUI.insets(5, 0, 5, 0)
+            val commits = gitService.getRecentCommits(100)
             commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
                 if (commits.isNotEmpty()) selectedIndex = 0
             }
-
-            val refreshButton = JButton(AllIcons.Actions.Refresh).apply {
-                toolTipText = "Refresh"
-                isBorderPainted = false
-                isContentAreaFilled = false
-                isFocusPainted = false
-                margin = JBUI.emptyInsets()
-                preferredSize = java.awt.Dimension(24, 24)
-                addActionListener { refresh() }
-            }
-
-            val commitPanel = JPanel(BorderLayout(5, 0)).apply {
-                isOpaque = false
-                add(commitComboBox, BorderLayout.CENTER)
-                add(refreshButton, BorderLayout.EAST)
-            }
-            add(commitPanel, gbc)
+            add(commitComboBox, gbc)
 
             // Start button
             gbc.gridy++
@@ -201,14 +181,48 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             add(button, gbc)
         }
 
-        add(centerPanel, BorderLayout.CENTER)
+        // Wrapper with horizontal BoxLayout to center content with max-width
+        val wrapperPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            border = JBUI.Borders.empty(10)
+
+            val horizontalBox = Box.createHorizontalBox().apply {
+                add(Box.createHorizontalGlue())
+                add(object : JBPanel<JBPanel<*>>(BorderLayout()) {
+                    init {
+                        add(contentPanel, BorderLayout.CENTER)
+                    }
+                    override fun getPreferredSize(): java.awt.Dimension {
+                        val pref = super.getPreferredSize()
+                        return java.awt.Dimension(minOf(pref.width, 350), pref.height)
+                    }
+                    override fun getMaximumSize(): java.awt.Dimension {
+                        return java.awt.Dimension(350, Int.MAX_VALUE)
+                    }
+                })
+                add(Box.createHorizontalGlue())
+            }
+
+            val verticalBox = Box.createVerticalBox().apply {
+                add(horizontalBox)
+                add(Box.createVerticalGlue())
+            }
+
+            add(verticalBox, BorderLayout.CENTER)
+        }
+
+        add(wrapperPanel, BorderLayout.CENTER)
     }
 
     private fun showActiveReviewPanel() {
         val data = reviewService.reloadReviewData() ?: return
 
         // Header - show repo, branch, base commit and progress
-        val shortCommit = data.baseCommit.take(7)
+        val commitInfo = gitService.getCommitInfo(data.baseCommit)
+        val commitDisplay = if (commitInfo != null) {
+            "${commitInfo.shortSha} ${commitInfo.message}"
+        } else {
+            data.baseCommit.take(7)
+        }
         val currentBranch = gitService.getCurrentBranch() ?: "unknown"
         val headerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -247,7 +261,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             add(Box.createVerticalStrut(4))
 
             // Review info
-            add(JBLabel("Reviewing changes since: $shortCommit").apply { alignmentX = LEFT_ALIGNMENT })
+            add(JBLabel("Reviewing changes since: $commitDisplay").apply { alignmentX = LEFT_ALIGNMENT })
 
             val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
             val totalCount = data.comments.size

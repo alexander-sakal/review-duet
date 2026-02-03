@@ -158,4 +158,17 @@ class GitService(val projectRoot: Path) {
             }
             .filter { it.sha.isNotBlank() }
     }
+
+    fun getCommitInfo(commitSha: String): CommitInfo? {
+        val output = runGitCommandWithOutput("log", "--format=%H|%h|%s", "-n", "1", commitSha)
+            ?: return null
+        val line = output.trim()
+        if (line.isBlank()) return null
+        val parts = line.split("|", limit = 3)
+        return CommitInfo(
+            sha = parts.getOrElse(0) { "" },
+            shortSha = parts.getOrElse(1) { "" },
+            message = parts.getOrElse(2) { "" }
+        )
+    }
 }
