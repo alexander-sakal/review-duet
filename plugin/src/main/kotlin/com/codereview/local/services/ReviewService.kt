@@ -40,11 +40,26 @@ class ReviewService(private val projectRoot: Path) {
     fun hasActiveReview(): Boolean = getCommentsFile().exists()
 
     fun loadReviewData(): ReviewData? {
-        if (!hasActiveReview()) return null
+        if (!hasActiveReview()) {
+            cachedData = null
+            return null
+        }
+
+        // Return cached data if available
+        cachedData?.let { return it }
 
         val json = getCommentsFile().readText()
         cachedData = serializer.deserialize(json)
         return cachedData
+    }
+
+    /**
+     * Force reload from disk, bypassing cache.
+     * Use when external changes may have occurred.
+     */
+    fun reloadReviewData(): ReviewData? {
+        cachedData = null
+        return loadReviewData()
     }
 
     fun saveReviewData(data: ReviewData) {

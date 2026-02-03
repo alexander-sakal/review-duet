@@ -48,11 +48,29 @@ class ChangesPanel(
         val COMMENT_ID_KEY = com.intellij.openapi.util.Key.create<Int>("CodeReview.CommentId")
 
         /**
+         * Find the repo that contains the given relative file path.
+         * Falls back to first discovered repo if not found.
+         */
+        private fun findRepoForRelativePath(project: Project, filePath: String?): Path? {
+            val repos = GitService.discoverRepos(project)
+            if (repos.isEmpty()) return null
+
+            if (filePath != null) {
+                // Try to find which repo contains this file
+                val repo = repos.find { it.resolve(filePath).toFile().exists() }
+                if (repo != null) return repo
+            }
+
+            // Fall back to first repo
+            return repos.first()
+        }
+
+        /**
          * Open diff view showing changes in a single commit (commit^ to commit)
          */
         fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null, windowBounds: Rectangle? = null) {
-            val basePath = Path.of(project.basePath ?: return)
-            val gitService = GitService(basePath)
+            val repoRoot = findRepoForRelativePath(project, filePath) ?: return
+            val gitService = GitService(repoRoot)
 
             val parentCommit = gitService.getParentCommitSha(commitSha) ?: return
             openDiffBetweenCommits(project, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId, windowBounds = windowBounds)
@@ -62,8 +80,8 @@ class ChangesPanel(
          * Open diff view showing changes between two commits
          */
         fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null, windowBounds: Rectangle? = null) {
-            val basePath = Path.of(project.basePath ?: return)
-            val gitService = GitService(basePath)
+            val repoRoot = findRepoForRelativePath(project, filePath) ?: return
+            val gitService = GitService(repoRoot)
 
             // Get files changed between commits
             val changedFiles = gitService.getChangedFiles(fromCommit, toCommit)
@@ -144,6 +162,8 @@ class ChangesPanel(
     private val fileTree = Tree(treeModel)
     private var currentChanges: List<ChangedFile> = emptyList()
     private var baseCommit: String? = null
+    // Cached set for O(1) lookup during render - avoids disk I/O during scroll
+    private var reviewedFilesCache: Set<String> = emptySet()
 
     init {
         // Toolbar with actions
@@ -208,8 +228,10 @@ class ChangesPanel(
     }
 
     private fun refreshFileList() {
-        val data = reviewService.loadReviewData()
+        val data = reviewService.reloadReviewData()
         baseCommit = data?.baseCommit
+        // Cache reviewed files for O(1) lookup in renderer
+        reviewedFilesCache = data?.reviewedFiles ?: emptySet()
         rootNode.removeAllChildren()
 
         if (baseCommit == null) {
@@ -374,7 +396,6 @@ class ChangesPanel(
             when (userObject) {
                 is ChangedFile -> {
                     // File node
-                    val isReviewed = reviewService.isFileReviewed(userObject.path)
                     val fileName = userObject.path.substringAfterLast('/')
 
                     // Get file type icon
@@ -391,10 +412,11 @@ class ChangesPanel(
                     val attrs = SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, color)
                     append(fileName, attrs)
 
-                    // Green checkmark for reviewed files
-                    if (isReviewed) {
-                        append("  ✓", SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, JBColor(0x007F00, 0x629755)))
-                    }
+                    // TODO: Uncomment to enable reviewed checkmark (uses cached set, O(1) lookup)
+                    // val isReviewed = reviewedFilesCache.contains(userObject.path)
+                    // if (isReviewed) {
+                    //     append("  ✓", SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, JBColor(0x007F00, 0x629755)))
+                    // }
                 }
                 is String -> {
                     // Directory node

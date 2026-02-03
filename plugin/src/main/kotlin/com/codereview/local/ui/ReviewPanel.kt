@@ -15,6 +15,7 @@ import git4idea.repo.GitRepositoryManager
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
+import javax.swing.Box
 import javax.swing.BoxLayout
 import java.nio.file.Path
 import javax.swing.DefaultComboBoxModel
@@ -204,19 +205,53 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     }
 
     private fun showActiveReviewPanel() {
-        val data = reviewService.loadReviewData() ?: return
+        val data = reviewService.reloadReviewData() ?: return
 
-        // Header - show base commit and progress
+        // Header - show repo, branch, base commit and progress
         val shortCommit = data.baseCommit.take(7)
+        val currentBranch = gitService.getCurrentBranch() ?: "unknown"
         val headerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(0, 10, 4, 10)
 
-            add(JBLabel("Reviewing changes since: $shortCommit"))
+            // Repo selector or label
+            if (availableRepos.size > 1) {
+                val repoRow = JPanel(BorderLayout(5, 0)).apply {
+                    isOpaque = false
+                    alignmentX = LEFT_ALIGNMENT
+                    maximumSize = java.awt.Dimension(Int.MAX_VALUE, 24)
+
+                    add(JBLabel("Repository:"), BorderLayout.WEST)
+                    val repoNames = availableRepos.map { it.fileName.toString() }.toTypedArray()
+                    val repoSelector = JComboBox(DefaultComboBoxModel(repoNames)).apply {
+                        selectedItem = selectedRepoPath.fileName.toString()
+                        addActionListener {
+                            val selectedName = selectedItem as? String ?: return@addActionListener
+                            val repo = availableRepos.find { it.fileName.toString() == selectedName }
+                            if (repo != null && repo != selectedRepoPath) {
+                                onRepoSelected(repo)
+                            }
+                        }
+                    }
+                    add(repoSelector, BorderLayout.CENTER)
+                }
+                add(repoRow)
+                add(Box.createVerticalStrut(4))
+            } else {
+                val repoName = selectedRepoPath.fileName.toString()
+                add(JBLabel("Repository: $repoName").apply { alignmentX = LEFT_ALIGNMENT })
+            }
+
+            // Branch display
+            add(JBLabel("Branch: $currentBranch").apply { alignmentX = LEFT_ALIGNMENT })
+            add(Box.createVerticalStrut(4))
+
+            // Review info
+            add(JBLabel("Reviewing changes since: $shortCommit").apply { alignmentX = LEFT_ALIGNMENT })
 
             val resolvedCount = data.comments.count { it.status == CommentStatus.RESOLVED }
             val totalCount = data.comments.size
-            add(JBLabel("Progress: $resolvedCount/$totalCount resolved"))
+            add(JBLabel("Progress: $resolvedCount/$totalCount resolved").apply { alignmentX = LEFT_ALIGNMENT })
         }
 
         // Comment list panel - sort: fixed first (user reviews), open (agent's turn), resolved last

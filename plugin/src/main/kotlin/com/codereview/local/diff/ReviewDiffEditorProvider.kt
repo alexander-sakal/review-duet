@@ -1,5 +1,6 @@
 package com.codereview.local.diff
 
+import com.codereview.local.services.GitService
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.requests.SimpleDiffRequest
@@ -23,10 +24,15 @@ class ReviewDiffEditorProvider : FileEditorProvider, DumbAware {
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor {
         val reviewFile = file as ReviewDiffVirtualFile
-        val basePath = Path.of(project.basePath!!)
+
+        // Find the repo that contains this file
+        val repos = GitService.discoverRepos(project)
+        val repoRoot = repos.find { repo ->
+            repo.resolve(reviewFile.filePath).toFile().exists()
+        } ?: Path.of(project.basePath!!)
 
         val diffRequest = ReviewDiffRequestProducer.createDiffRequest(
-            project, basePath, reviewFile.filePath, reviewFile.baseCommit
+            project, repoRoot, reviewFile.filePath, reviewFile.baseCommit
         ) ?: SimpleDiffRequest(
             "Review: ${reviewFile.filePath}",
             DiffContentFactory.getInstance().createEmpty(),

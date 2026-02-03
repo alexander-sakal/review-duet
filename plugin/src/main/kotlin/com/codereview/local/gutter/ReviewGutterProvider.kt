@@ -1,6 +1,7 @@
 package com.codereview.local.gutter
 
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
@@ -11,7 +12,6 @@ import com.intellij.ui.JBColor
 import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
-import java.nio.file.Path
 import javax.swing.Icon
 
 class ReviewGutterProvider : LineMarkerProvider {
@@ -22,15 +22,14 @@ class ReviewGutterProvider : LineMarkerProvider {
 
         val project = element.project
         val file = element.containingFile?.virtualFile ?: return null
-        val basePath = project.basePath ?: return null
 
-        val service = ReviewService(Path.of(basePath))
+        // Find the repo that contains this file
+        val (repoRoot, relativePath) = GitService.getRelativePath(project, file.path) ?: return null
+
+        val service = ReviewService(repoRoot)
         if (!service.hasActiveReview()) return null
 
         val data = service.loadReviewData() ?: return null
-
-        // Get relative file path
-        val relativePath = file.path.removePrefix("$basePath/")
 
         // Find comments for this file and line
         val document = com.intellij.psi.PsiDocumentManager.getInstance(project)

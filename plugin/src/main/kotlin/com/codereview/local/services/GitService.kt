@@ -22,6 +22,32 @@ class GitService(val projectRoot: Path) {
                 .map { it.root.toNioPath() }
                 .sortedBy { it.fileName.toString() }
         }
+
+        /**
+         * Find the repo root that contains the given file path.
+         * Returns null if file is not in any known repo.
+         */
+        fun findRepoForFile(project: Project, filePath: String): Path? {
+            val repos = discoverRepos(project)
+            val filePathNormalized = Path.of(filePath).toAbsolutePath().normalize()
+
+            // Find repo whose root is an ancestor of the file
+            return repos.find { repo ->
+                filePathNormalized.startsWith(repo.toAbsolutePath().normalize())
+            }
+        }
+
+        /**
+         * Get the relative path of a file within its repo.
+         * Returns null if file is not in any known repo.
+         */
+        fun getRelativePath(project: Project, absoluteFilePath: String): Pair<Path, String>? {
+            val repoRoot = findRepoForFile(project, absoluteFilePath) ?: return null
+            val relativePath = repoRoot.toAbsolutePath().normalize()
+                .relativize(Path.of(absoluteFilePath).toAbsolutePath().normalize())
+                .toString()
+            return repoRoot to relativePath
+        }
     }
 
     fun createTag(tagName: String): Boolean {

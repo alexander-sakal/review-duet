@@ -2,6 +2,7 @@ package com.codereview.local.diff
 
 import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
@@ -57,13 +58,19 @@ class DiffCommentExtension : DiffExtension() {
         if (viewer !is TwosideTextDiffViewer) return
 
         val project = context.project ?: return
-        val basePath = project.basePath ?: return
 
         val editor = viewer.editor2
         val title = request.title ?: return
 
         // Extract file path from title
         val filePath = extractFilePath(title)
+
+        // Find the repo that contains this file
+        val repos = GitService.discoverRepos(project)
+        val repoRoot = repos.find { repo ->
+            repo.resolve(filePath).toFile().exists()
+        } ?: return
+        val basePath = repoRoot.toString()
 
         val commentInlays = mutableListOf<Inlay<*>>()
 

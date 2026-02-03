@@ -1,12 +1,12 @@
 package com.codereview.local.actions
 
 import com.codereview.local.diff.ReviewDiffVirtualFile
+import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.fileEditor.FileEditorManager
-import java.nio.file.Path
 
 /**
  * Action to open the review diff view for the current file.
@@ -15,14 +15,13 @@ class OpenReviewDiffAction : AnAction("Open Review Diff", "Open diff view for cu
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val basePath = project.basePath ?: return
         val vFile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        val reviewService = ReviewService(Path.of(basePath))
-        val reviewData = reviewService.loadReviewData() ?: return
+        // Find the repo that contains this file
+        val (repoRoot, relativePath) = GitService.getRelativePath(project, vFile.path) ?: return
 
-        // Get relative path
-        val relativePath = vFile.path.removePrefix("$basePath/")
+        val reviewService = ReviewService(repoRoot)
+        val reviewData = reviewService.loadReviewData() ?: return
 
         // Create and open virtual file
         val reviewDiffFile = ReviewDiffVirtualFile(project, relativePath, reviewData.baseCommit)
@@ -31,12 +30,16 @@ class OpenReviewDiffAction : AnAction("Open Review Diff", "Open diff view for cu
 
     override fun update(e: AnActionEvent) {
         val project = e.project
-        val basePath = project?.basePath
         val vFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
 
-        val enabled = if (project != null && basePath != null && vFile != null) {
-            val reviewService = ReviewService(Path.of(basePath))
-            reviewService.hasActiveReview()
+        val enabled = if (project != null && vFile != null) {
+            val pathInfo = GitService.getRelativePath(project, vFile.path)
+            if (pathInfo != null) {
+                val reviewService = ReviewService(pathInfo.first)
+                reviewService.hasActiveReview()
+            } else {
+                false
+            }
         } else {
             false
         }

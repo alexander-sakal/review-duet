@@ -1,5 +1,6 @@
 package com.codereview.local.actions
 
+import com.codereview.local.services.GitService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -7,6 +8,7 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.vfs.LocalFileSystem
 import java.io.File
+import java.nio.file.Path
 
 class GoToSourceAction : AnAction(
     "Go to Source",
@@ -15,17 +17,16 @@ class GoToSourceAction : AnAction(
 ) {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val basePath = project.basePath ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
 
         // Get current line from caret
         val caretLine = editor.caretModel.logicalPosition.line
 
         // Try to get file path from context - check file header or tab title
-        val filePath = getFilePathFromContext(e, basePath) ?: return
+        val (repoRoot, relativePath) = getFilePathFromContext(e) ?: return
 
         // Find the virtual file
-        val file = File(basePath, filePath)
+        val file = repoRoot.resolve(relativePath).toFile()
         val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
 
         if (virtualFile != null && virtualFile.exists()) {
@@ -40,7 +41,11 @@ class GoToSourceAction : AnAction(
         e.presentation.isEnabledAndVisible = project != null && editor != null
     }
 
-    private fun getFilePathFromContext(e: AnActionEvent, basePath: String): String? {
+    private fun getFilePathFromContext(e: AnActionEvent): Pair<Path, String>? {
+        val project = e.project ?: return null
+        val repos = GitService.discoverRepos(project)
+        if (repos.isEmpty()) return null
+
         // Try to get from the file header component or context
         val context = e.getData(PlatformDataKeys.CONTEXT_COMPONENT)
 
@@ -51,8 +56,13 @@ class GoToSourceAction : AnAction(
             if (name != null && name.contains(".") && !name.contains("→")) {
                 // Might be a file path
                 val path = name.substringBefore(" (").trim()
-                if (path.isNotEmpty() && File(basePath, path).exists()) {
-                    return path
+                if (path.isNotEmpty()) {
+                    // Try to find which repo contains this file
+                    for (repo in repos) {
+                        if (repo.resolve(path).toFile().exists()) {
+                            return repo to path
+                        }
+                    }
                 }
             }
 
@@ -60,8 +70,13 @@ class GoToSourceAction : AnAction(
             if (component is java.awt.Frame) {
                 val title = component.title
                 val path = extractFilePath(title)
-                if (path != null && File(basePath, path).exists()) {
-                    return path
+                if (path != null) {
+                    // Try to find which repo contains this file
+                    for (repo in repos) {
+                        if (repo.resolve(path).toFile().exists()) {
+                            return repo to path
+                        }
+                    }
                 }
             }
 
@@ -71,10 +86,7 @@ class GoToSourceAction : AnAction(
         // Try from virtual file if available
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
         if (virtualFile != null) {
-            val path = virtualFile.path
-            if (path.startsWith(basePath)) {
-                return path.removePrefix(basePath).removePrefix("/")
-            }
+            return GitService.getRelativePath(project, virtualFile.path)
         }
 
         return null

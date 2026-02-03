@@ -1,11 +1,11 @@
 package com.codereview.local.actions
 
+import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.ui.Messages
-import java.nio.file.Path
 
 class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at current line", null) {
 
@@ -13,9 +13,18 @@ class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val basePath = project.basePath ?: return
 
-        val reviewService = ReviewService(Path.of(basePath))
+        // Find the repo that contains this file
+        val (repoRoot, relativePath) = GitService.getRelativePath(project, virtualFile.path) ?: run {
+            Messages.showWarningDialog(
+                project,
+                "File is not in a known git repository.",
+                "No Repository Found"
+            )
+            return
+        }
+
+        val reviewService = ReviewService(repoRoot)
 
         // Check if there's an active review
         if (!reviewService.hasActiveReview()) {
@@ -30,14 +39,6 @@ class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at
         // Get current line (1-based)
         val caretModel = editor.caretModel
         val line = caretModel.logicalPosition.line + 1
-
-        // Get relative file path
-        val filePath = virtualFile.path
-        val relativePath = if (filePath.startsWith(basePath)) {
-            filePath.removePrefix(basePath).removePrefix("/")
-        } else {
-            virtualFile.name
-        }
 
         // Show dialog to enter comment
         val dialog = AddCommentDialog(project, relativePath, line)
