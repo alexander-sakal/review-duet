@@ -9,7 +9,16 @@ Enable structured review rounds with comment tracking and status management for 
 ## Components
 
 - **Plugin** (`plugin/`) - IntelliJ/PhpStorm plugin for review UI
-- **CLI** (`cli/`) - Command-line tool (`review-duet`) for Claude to interact with reviews
+- **CLI** (`cli/`) - Command-line interface for agent communication
+- **Skill** (`skills/`) - Claude Code skill for processing comments
+
+## How It Works
+
+**Plugin** writes comments to `.review-duet/{branch}.json` and displays review state.
+
+**CLI** (`review-duet`) provides commands for Claude Code to read comments, mark them fixed, and update the baseline commit.
+
+**Skill** (`/review-duet:process`) instructs Claude Code to autonomously process open comments - reading each one, making fixes, committing changes, and marking comments as fixed.
 
 ## Quick Start
 
@@ -25,9 +34,15 @@ cd cli && npm install && npm link
 2. Install from disk in IDE: Settings → Plugins → Install from disk
 3. Select `plugin/build/distributions/code-review-local-*.zip`
 
+### Install Claude Code Skill
+
+```bash
+ln -s $(pwd)/skills/review-duet:process ~/.claude/skills/review-duet:process
+```
+
 ## Usage
 
-### Plugin
+### In the IDE
 
 1. Open the "Code Review" tool window
 2. Select repository (if multi-repo project)
@@ -36,45 +51,25 @@ cd cli && npm install && npm link
 5. Add comments via gutter icons or right-click in editor
 6. View changes and comments in the panel
 
-### CLI
+### In Claude Code
 
-```bash
-# List all comments
-review-duet list
+Run `/review-duet:process` to automatically process all open comments. Claude will:
+1. Read each open comment
+2. Understand the requested change
+3. Make the fix (checking for similar issues elsewhere)
+4. Commit the change
+5. Mark the comment as fixed with an explanation
 
-# List open comments only
-review-duet list --status=open
+## Workflow
 
-# Show comment details
-review-duet show <id>
-
-# Mark comment as fixed
-review-duet fix <id> --commit <sha> --message "Explanation"
-
-# Accept changes and move baseline to HEAD
-review-duet accept
-
-# Use explicit review file (for multi-repo)
-review-duet list --review=/path/to/.review-duet/branch.json
-```
-
-### Claude Code Skill
-
-Use `/review-duet:process` in Claude Code to automatically process all open comments.
-
-To install the skill:
-
-```bash
-ln -s $(pwd)/skills/review-duet:process ~/.claude/skills/review-duet:process
-```
-
-## File Structure
-
-Reviews are stored in `.review-duet/{branch}.json` at the repository root.
+1. **Start Review** - Select base commit in plugin
+2. **Develop** - Claude implements features
+3. **Review** - Add comments in IDE on changed lines
+4. **Process** - Run `/review-duet:process` in Claude Code
+5. **Verify** - Review fixes in IDE, resolve or reopen comments
+6. **Repeat** - Continue until satisfied
 
 ## Development
-
-### Local
 
 ```bash
 # CLI
@@ -83,15 +78,6 @@ cd cli && npm install && npm test
 # Plugin
 cd plugin && ./gradlew runIde
 ```
-
-## Workflow
-
-1. **Start Review** - Select base commit in plugin
-2. **Develop** - Claude implements features
-3. **Review** - Add comments in IDE on changed lines
-4. **Process** - Run `/review-duet:process` in Claude Code
-5. **Verify** - Review fixes, resolve or reopen comments
-6. **Repeat** - Continue until satisfied
 
 ## License
 
