@@ -62,6 +62,12 @@ review-duet list --review=/path/to/.review-duet/branch.json
 
 Use `/review-duet:process` in Claude Code to automatically process all open comments.
 
+To install the skill:
+
+```bash
+ln -s $(pwd)/skills/review-duet:process ~/.claude/skills/review-duet:process
+```
+
 ## File Structure
 
 Reviews are stored in `.review-duet/{branch}.json` at the repository root.
