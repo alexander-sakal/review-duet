@@ -9,12 +9,11 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
+import git4idea.repo.GitRepositoryManager
 import java.awt.BorderLayout
-import java.awt.FlowLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.nio.file.Path
-import javax.swing.BoxLayout
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
 import javax.swing.JComboBox
@@ -42,13 +41,29 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     init {
         border = JBUI.Borders.empty(10, 0)
+        initRepos()
+        refresh()
+
+        // Listen for repository changes (VCS loads async)
+        project.messageBus.connect().subscribe(
+            GitRepositoryManager.GIT_REPO_CHANGE,
+            GitRepositoryManager.GitRepositoryChangeListener {
+                initRepos()
+                refresh()
+            }
+        )
+    }
+
+    private fun initRepos() {
         availableRepos = GitService.discoverRepos(project)
         if (availableRepos.isNotEmpty()) {
-            selectedRepoPath = availableRepos.first()
+            // Keep current selection if still valid, otherwise use first
+            if (selectedRepoPath !in availableRepos) {
+                selectedRepoPath = availableRepos.first()
+            }
             reviewService = ReviewService(selectedRepoPath)
             gitService = GitService(selectedRepoPath)
         }
-        refresh()
     }
 
     private fun onRepoSelected(repoPath: Path) {
