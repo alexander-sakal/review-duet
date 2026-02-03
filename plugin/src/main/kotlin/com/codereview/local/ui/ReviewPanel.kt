@@ -157,6 +157,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
             val refreshButton = JButton(AllIcons.Actions.Refresh).apply {
                 toolTipText = "Refresh"
+                isBorderPainted = false
+                isContentAreaFilled = false
                 addActionListener { refresh() }
             }
 
