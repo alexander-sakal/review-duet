@@ -155,14 +155,14 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             }
 
             val refreshButton = JButton(AllIcons.Actions.Refresh).apply {
-                toolTipText = "Refresh commits"
+                toolTipText = "Refresh"
                 addActionListener { refresh() }
             }
 
-            val commitPanel = JPanel(FlowLayout(FlowLayout.CENTER, 5, 0)).apply {
+            val commitPanel = JPanel(BorderLayout(5, 0)).apply {
                 isOpaque = false
-                add(commitComboBox)
-                add(refreshButton)
+                add(commitComboBox, BorderLayout.CENTER)
+                add(refreshButton, BorderLayout.EAST)
             }
             add(commitPanel, gbc)
 
