@@ -9,10 +9,13 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
+import git4idea.repo.GitRepository
+import git4idea.repo.GitRepositoryChangeListener
 import git4idea.repo.GitRepositoryManager
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
+import javax.swing.BoxLayout
 import java.nio.file.Path
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
@@ -46,8 +49,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
         // Listen for repository changes (VCS loads async)
         project.messageBus.connect().subscribe(
-            GitRepositoryManager.GIT_REPO_CHANGE,
-            GitRepositoryManager.GitRepositoryChangeListener {
+            GitRepository.GIT_REPO_CHANGE,
+            GitRepositoryChangeListener {
                 initRepos()
                 refresh()
             }
