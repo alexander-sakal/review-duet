@@ -159,6 +159,9 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 toolTipText = "Refresh"
                 isBorderPainted = false
                 isContentAreaFilled = false
+                isFocusPainted = false
+                margin = JBUI.emptyInsets()
+                preferredSize = java.awt.Dimension(24, 24)
                 addActionListener { refresh() }
             }
 
