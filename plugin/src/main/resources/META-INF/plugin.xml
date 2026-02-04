@@ -1,14 +1,14 @@
 <idea-plugin>
     <id>com.codereview.local</id>
-    <name>Code Review Local</name>
-    <vendor>Code Review Local</vendor>
+    <name>Review Duet</name>
+    <vendor>Review Duet</vendor>
     <description>Local code review workflows for AI-assisted development</description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>Git4Idea</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Code Review"
+        <toolWindow id="Review Duet"
                     anchor="right"
                     factoryClass="com.codereview.local.ui.ReviewToolWindowFactory"
                     icon="AllIcons.Actions.Annotate"/>
