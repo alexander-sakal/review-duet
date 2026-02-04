@@ -21,6 +21,7 @@ class ReviewService(private val projectRoot: Path) {
     private fun ensureGitignore() {
         val gitignore = projectRoot.resolve(".gitignore")
         val entry = ".review-duet/"
+        var modified = false
 
         if (gitignore.exists()) {
             val content = gitignore.readText()
@@ -31,9 +32,15 @@ class ReviewService(private val projectRoot: Path) {
                     "$content\n$entry\n"
                 }
                 gitignore.writeText(newContent)
+                modified = true
             }
         } else {
             gitignore.writeText("$entry\n")
+            modified = true
+        }
+
+        if (modified) {
+            gitService.commitFile(".gitignore", "chore: add .review-duet to gitignore")
         }
     }
 

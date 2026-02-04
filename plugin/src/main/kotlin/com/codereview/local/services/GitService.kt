@@ -50,6 +50,12 @@ class GitService(val projectRoot: Path) {
         }
     }
 
+    fun commitFile(filePath: String, message: String): Boolean {
+        val addResult = runGitCommand("add", filePath)
+        if (addResult != 0) return false
+        return runGitCommand("commit", "-m", message) == 0
+    }
+
     fun createTag(tagName: String): Boolean {
         return runGitCommand("tag", tagName) == 0
     }
@@ -170,5 +176,34 @@ class GitService(val projectRoot: Path) {
             shortSha = parts.getOrElse(1) { "" },
             message = parts.getOrElse(2) { "" }
         )
+    }
+
+    fun branchExists(branchName: String): Boolean {
+        return runGitCommand("rev-parse", "--verify", "refs/heads/$branchName") == 0
+    }
+
+    /**
+     * Get the base branch for the current branch.
+     * Checks for "develop" first, then "main". Returns null if neither exists.
+     */
+    fun getBaseBranch(): String? {
+        return when {
+            branchExists("develop") -> "develop"
+            branchExists("main") -> "main"
+            else -> null
+        }
+    }
+
+    /**
+     * Get SHAs of commits that are in HEAD but not in the base branch.
+     * These are the "new" commits on the current branch.
+     */
+    fun getNewCommitShas(baseBranch: String): Set<String> {
+        val output = runGitCommandWithOutput("log", "--format=%H", "$baseBranch..HEAD")
+            ?: return emptySet()
+        return output.trim()
+            .split("\n")
+            .filter { it.isNotBlank() }
+            .toSet()
     }
 }

@@ -9,6 +9,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.util.ui.JBUI
+import com.intellij.dvcs.repo.VcsRepositoryManager
+import com.intellij.dvcs.repo.VcsRepositoryMappingListener
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryChangeListener
 import git4idea.repo.GitRepositoryManager
@@ -25,6 +27,10 @@ import javax.swing.JPanel
 import com.intellij.ui.components.JBTabbedPane
 import javax.swing.JSeparator
 import javax.swing.SwingConstants
+import javax.swing.ListCellRenderer
+import javax.swing.JList
+import java.awt.Component
+import com.intellij.ui.JBColor
 
 class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLayout()) {
 
@@ -49,9 +55,18 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         refresh()
 
         // Listen for repository changes (VCS loads async)
-        project.messageBus.connect().subscribe(
+        val connection = project.messageBus.connect()
+        connection.subscribe(
             GitRepository.GIT_REPO_CHANGE,
             GitRepositoryChangeListener {
+                initRepos()
+                refresh()
+            }
+        )
+        // Listen for when repositories are first discovered (initial scan)
+        connection.subscribe(
+            VcsRepositoryManager.VCS_REPOSITORY_MAPPING_UPDATED,
+            VcsRepositoryMappingListener {
                 initRepos()
                 refresh()
             }
@@ -103,8 +118,22 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         if (availableRepos.isEmpty()) {
             val errorPanel = JBPanel<JBPanel<*>>().apply {
                 layout = GridBagLayout()
+                val gbc = GridBagConstraints().apply {
+                    gridx = 0
+                    gridy = 0
+                    insets = JBUI.insets(5)
+                }
                 val errorLabel = JBLabel("No git repository found")
-                add(errorLabel)
+                add(errorLabel, gbc)
+
+                gbc.gridy = 1
+                val refreshButton = JButton("Refresh").apply {
+                    addActionListener {
+                        initRepos()
+                        refresh()
+                    }
+                }
+                add(refreshButton, gbc)
             }
             add(errorPanel, BorderLayout.CENTER)
             return
@@ -168,8 +197,11 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             gbc.gridy++
             gbc.insets = JBUI.insets(5, 0, 5, 0)
             val commits = gitService.getRecentCommits(100)
+            val baseBranch = gitService.getBaseBranch()
+            val newCommitShas = baseBranch?.let { gitService.getNewCommitShas(it) } ?: emptySet()
             commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
                 if (commits.isNotEmpty()) selectedIndex = 0
+                renderer = CommitCellRenderer(newCommitShas)
             }
             add(commitComboBox, gbc)
 
@@ -383,5 +415,36 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             reviewDir.delete()
         }
         refresh()
+    }
+}
+
+/**
+ * Custom cell renderer that highlights commits not present in the base branch.
+ */
+private class CommitCellRenderer(
+    private val newCommitShas: Set<String>
+) : ListCellRenderer<CommitInfo> {
+
+    private val defaultRenderer = javax.swing.DefaultListCellRenderer()
+
+    override fun getListCellRendererComponent(
+        list: JList<out CommitInfo>?,
+        value: CommitInfo?,
+        index: Int,
+        isSelected: Boolean,
+        cellHasFocus: Boolean
+    ): Component {
+        val component = defaultRenderer.getListCellRendererComponent(
+            list, value?.displayText ?: "", index, isSelected, cellHasFocus
+        )
+
+        if (component is javax.swing.JLabel && value != null) {
+            val isNew = value.sha in newCommitShas
+            if (isNew && !isSelected) {
+                component.foreground = JBColor.namedColor("Label.infoForeground", JBColor.BLUE)
+            }
+        }
+
+        return component
     }
 }
