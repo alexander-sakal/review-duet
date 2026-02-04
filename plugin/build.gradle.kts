@@ -17,11 +17,14 @@ repositories {
 dependencies {
     implementation("com.google.code.gson:gson:2.13.2")
     // kotlinx-coroutines is provided by IntelliJ Platform, no need to add explicitly
+    testImplementation("junit:junit:4.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.4")
 
     intellijPlatform {
         create(providers.gradleProperty("platformType").get(), providers.gradleProperty("platformVersion").get())
         bundledPlugin("Git4Idea")
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
 }
 

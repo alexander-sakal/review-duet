@@ -19,6 +19,30 @@ class ReviewServiceTest {
 
     @BeforeEach
     fun setup() {
+        // Initialize git repo so GitService can detect branch
+        ProcessBuilder("git", "init")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+        ProcessBuilder("git", "config", "user.email", "test@test.com")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+        ProcessBuilder("git", "config", "user.name", "Test")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+        // Create initial commit so HEAD exists
+        tempDir.resolve(".gitkeep").writeText("")
+        ProcessBuilder("git", "add", ".")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+        ProcessBuilder("git", "commit", "-m", "init")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+
         service = ReviewService(tempDir)
     }
 
@@ -29,9 +53,11 @@ class ReviewServiceTest {
 
     @Test
     fun `should return true when review file exists`() {
-        val reviewDir = tempDir.resolve(".review")
+        val reviewDir = tempDir.resolve(".review-duet")
         reviewDir.createDirectories()
-        reviewDir.resolve("comments.json").writeText("""
+        // Branch is "main" or "master" depending on git version
+        val branch = getBranch()
+        reviewDir.resolve("$branch.json").writeText("""
             {"version": 1, "baseCommit": "abc1234", "comments": []}
         """.trimIndent())
 
@@ -40,9 +66,10 @@ class ReviewServiceTest {
 
     @Test
     fun `should load review data`() {
-        val reviewDir = tempDir.resolve(".review")
+        val reviewDir = tempDir.resolve(".review-duet")
         reviewDir.createDirectories()
-        reviewDir.resolve("comments.json").writeText("""
+        val branch = getBranch()
+        reviewDir.resolve("$branch.json").writeText("""
             {
                 "version": 1,
                 "baseCommit": "abc1234",
@@ -57,6 +84,13 @@ class ReviewServiceTest {
         assertNotNull(data)
         assertEquals("abc1234", data?.baseCommit)
         assertEquals(1, data?.comments?.size)
+    }
+
+    private fun getBranch(): String {
+        val process = ProcessBuilder("git", "branch", "--show-current")
+            .directory(tempDir.toFile())
+            .start()
+        return process.inputStream.bufferedReader().readText().trim().ifEmpty { "master" }
     }
 
     @Test
