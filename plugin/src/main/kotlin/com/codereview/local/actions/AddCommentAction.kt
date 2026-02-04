@@ -2,6 +2,7 @@ package com.codereview.local.actions
 
 import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
+import com.codereview.local.util.ReviewPanelRefresher
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -46,6 +47,7 @@ class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at
             val commentText = dialog.getCommentText()
             if (commentText.isNotBlank()) {
                 reviewService.addComment(relativePath, line, commentText)
+                ReviewPanelRefresher.refresh(project)
                 Messages.showInfoMessage(
                     project,
                     "Comment added to $relativePath:$line",

@@ -49,6 +49,15 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private var gitService: GitService = GitService(basePath)
     private var changesPanel: ChangesPanel = ChangesPanel(project, gitService)
 
+    /**
+     * Returns the path to the currently active review file, or null if no review is active.
+     * Used by FileWatcher to only refresh when the active review file changes.
+     */
+    fun getActiveReviewFilePath(): String? {
+        val branch = gitService.getCurrentBranch() ?: return null
+        return selectedRepoPath.resolve(".review-duet").resolve("$branch.json").toString()
+    }
+
     init {
         border = JBUI.Borders.empty(10, 0)
         initRepos()
@@ -100,11 +109,20 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             selectedTabIndex = it.selectedIndex
         }
 
+        // Validate data BEFORE destroying UI to prevent empty panel on transient errors
+        val hasActiveReview = reviewService.hasActiveReview()
+        val reviewData = if (hasActiveReview) reviewService.reloadReviewData() else null
+
+        // If we have an active review but can't load data, keep current UI (transient error)
+        if (hasActiveReview && reviewData == null) {
+            return
+        }
+
         removeAll()
 
-        if (reviewService.hasActiveReview()) {
+        if (hasActiveReview && reviewData != null) {
             changesPanel.refresh()
-            showActiveReviewPanel()
+            showActiveReviewPanel(reviewData)
         } else {
             showNoReviewPanel()
         }
@@ -245,9 +263,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         add(wrapperPanel, BorderLayout.CENTER)
     }
 
-    private fun showActiveReviewPanel() {
-        val data = reviewService.reloadReviewData() ?: return
-
+    private fun showActiveReviewPanel(data: com.codereview.local.model.ReviewData) {
         // Header - show repo, branch, base commit and progress
         val commitInfo = gitService.getCommitInfo(data.baseCommit)
         val commitDisplay = if (commitInfo != null) {

@@ -4,6 +4,7 @@ import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
 import com.codereview.local.services.GitService
 import com.codereview.local.services.ReviewService
+import com.codereview.local.util.ReviewPanelRefresher
 import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
 import com.intellij.diff.FrameDiffTool
@@ -207,6 +208,7 @@ class DiffCommentExtension : DiffExtension() {
             isEnabled = comment?.status == CommentStatus.FIXED
             addActionListener {
                 reviewService.updateCommentStatus(commentId, CommentStatus.RESOLVED)
+                ReviewPanelRefresher.refresh(project)
 
                 // Update remaining count
                 val updatedData = reviewService.loadReviewData()
@@ -542,6 +544,7 @@ class DiffCommentExtension : DiffExtension() {
                 if (result == com.intellij.openapi.ui.Messages.YES) {
                     ReviewService(Path.of(basePath)).deleteComment(comment.id)
                     refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                    editor.project?.let { ReviewPanelRefresher.refresh(it) }
                 }
             }
         }
@@ -676,6 +679,7 @@ class DiffCommentExtension : DiffExtension() {
             val newText = textArea.text.trim()
             if (newText.isNotBlank() && newText != originalText) {
                 reviewService.updateCommentText(comment.id, newText)
+                editor.project?.let { ReviewPanelRefresher.refresh(it) }
             }
             refreshCommentInlays(editor, filePath, basePath, commentInlays)
         }
@@ -943,7 +947,7 @@ class DiffCommentExtension : DiffExtension() {
             Unit
         }
 
-        val formPanel = createNewCommentPanel(editor, filePath, line, basePath, commentInlays, onDismiss)
+        val formPanel = createNewCommentPanel(editor, project, filePath, line, basePath, commentInlays, onDismiss)
         val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
 
         val properties = EditorEmbeddedComponentManager.Properties(
@@ -961,6 +965,7 @@ class DiffCommentExtension : DiffExtension() {
 
     private fun createNewCommentPanel(
         editor: Editor,
+        project: Project,
         filePath: String,
         line: Int,
         basePath: String,
@@ -1019,6 +1024,7 @@ class DiffCommentExtension : DiffExtension() {
             if (text.isNotBlank()) {
                 reviewService.addComment(filePath, line, text)
                 refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                ReviewPanelRefresher.refresh(project)
             }
             onDismiss()
         }
