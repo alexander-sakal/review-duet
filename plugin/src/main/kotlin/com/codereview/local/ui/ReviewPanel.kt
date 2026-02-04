@@ -64,20 +64,25 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         refresh()
 
         // Listen for repository changes (VCS loads async)
+        // These listeners are called from background threads, so dispatch to EDT
         val connection = project.messageBus.connect()
         connection.subscribe(
             GitRepository.GIT_REPO_CHANGE,
             GitRepositoryChangeListener {
-                initRepos()
-                refresh()
+                javax.swing.SwingUtilities.invokeLater {
+                    initRepos()
+                    refresh()
+                }
             }
         )
         // Listen for when repositories are first discovered (initial scan)
         connection.subscribe(
             VcsRepositoryManager.VCS_REPOSITORY_MAPPING_UPDATED,
             VcsRepositoryMappingListener {
-                initRepos()
-                refresh()
+                javax.swing.SwingUtilities.invokeLater {
+                    initRepos()
+                    refresh()
+                }
             }
         )
     }
