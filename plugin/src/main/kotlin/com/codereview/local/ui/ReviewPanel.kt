@@ -439,9 +439,9 @@ private class CommitCellRenderer(
         )
 
         if (component is javax.swing.JLabel && value != null) {
-            val isNew = value.sha in newCommitShas
-            if (isNew && !isSelected) {
-                component.foreground = JBColor.namedColor("Label.infoForeground", JBColor.BLUE)
+            val isInBaseBranch = value.sha !in newCommitShas
+            if (isInBaseBranch && !isSelected) {
+                component.foreground = JBColor.GRAY
             }
         }
 
