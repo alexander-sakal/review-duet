@@ -22,4 +22,4 @@ Thumbs.db
 
 # Local
 intellij-community/
-.claude/
+.claude/settings.local.json
