@@ -25,7 +25,7 @@ Enable structured review rounds with comment tracking and status management for 
 ### Install CLI
 
 ```bash
-cd cli && npm install && npm link
+cd cli && npm install && npm run build && npm link
 ```
 
 ### Install Plugin

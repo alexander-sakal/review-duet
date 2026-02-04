@@ -16,7 +16,10 @@ Plugin writes comments to `.review-duet/{branch}.json` → CLI reads/updates →
 
 ```bash
 # CLI
-cd cli && npm install && npm test
+cd cli && npm install && npm run build && npm link
+
+# Run tests
+cd cli && npm test
 
 # Plugin
 cd plugin && ./gradlew runIde
