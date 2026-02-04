@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "code-review-local"
+rootProject.name = "review-duet"
