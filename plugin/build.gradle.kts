@@ -4,8 +4,8 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.11.0"
 }
 
-group = "com.codereview.local"
-version = "0.5.0"
+group = providers.gradleProperty("pluginGroup").get()
+version = providers.gradleProperty("pluginVersion").get()
 
 repositories {
     mavenCentral()
@@ -20,7 +20,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
 
     intellijPlatform {
-        phpstorm("2025.1")
+        create(providers.gradleProperty("platformType").get(), providers.gradleProperty("platformVersion").get())
         bundledPlugin("Git4Idea")
     }
 }
@@ -28,21 +28,23 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "251"
-            untilBuild = "253.*"
+            sinceBuild = providers.gradleProperty("sinceBuild")
+            untilBuild = providers.gradleProperty("untilBuild")
         }
     }
 }
 
+val javaVersion: String by project
+
 tasks {
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        sourceCompatibility = javaVersion
+        targetCompatibility = javaVersion
     }
 
     withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(javaVersion))
         }
     }
 
