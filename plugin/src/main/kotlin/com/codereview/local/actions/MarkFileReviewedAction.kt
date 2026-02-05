@@ -2,34 +2,33 @@ package com.codereview.local.actions
 
 import com.codereview.local.diff.DiffCommentExtension
 import com.codereview.local.model.Review
-import com.codereview.local.services.GitService
+import com.codereview.local.ui.ChangesPanel
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import java.nio.file.Path
 
+/**
+ * Action to mark a file as reviewed in the diff view toolbar.
+ * Only available in diff views opened from the Review Duet sidebar.
+ */
 class MarkFileReviewedAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
-        val (repoRoot, filePath) = getPathsFromEvent(e) ?: return
-
-        val review = Review.forCurrentBranch(repoRoot)
+        val (review, filePath) = getReviewAndPath(e) ?: return
         review.toggleFileReviewed(filePath)
     }
 
     override fun update(e: AnActionEvent) {
-        val paths = getPathsFromEvent(e)
+        val data = getReviewAndPath(e)
 
-        if (paths == null) {
+        if (data == null) {
             e.presentation.isEnabledAndVisible = false
             return
         }
 
-        val (repoRoot, filePath) = paths
-        val review = Review.forCurrentBranch(repoRoot)
+        val (review, filePath) = data
 
         if (!review.hasActiveReview()) {
             e.presentation.isEnabledAndVisible = false
@@ -45,49 +44,15 @@ class MarkFileReviewedAction : AnAction() {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
-    private fun getPathsFromEvent(e: AnActionEvent): Pair<Path, String>? {
-        val project = e.project ?: return null
+    private fun getReviewAndPath(e: AnActionEvent): Pair<Review, String>? {
+        // Get Review from DiffRequest (passed from ChangesPanel)
+        val diffRequest = e.getData(DiffDataKeys.DIFF_REQUEST) ?: return null
+        val review = diffRequest.getUserData(ChangesPanel.REVIEW_KEY) ?: return null
 
-        // Try to get from diff context (set by our DiffCommentExtension)
-        val diffContext = e.getData(DiffDataKeys.DIFF_CONTEXT)
-        if (diffContext != null) {
-            val filePath = diffContext.getUserData(DiffCommentExtension.FILE_PATH_KEY)
-            val basePath = diffContext.getUserData(DiffCommentExtension.BASE_PATH_KEY)
-            if (filePath != null && basePath != null) {
-                return Path.of(basePath) to filePath
-            }
-        }
+        // Get file path from DiffContext (set by DiffCommentExtension)
+        val diffContext = e.getData(DiffDataKeys.DIFF_CONTEXT) ?: return null
+        val filePath = diffContext.getUserData(DiffCommentExtension.FILE_PATH_KEY) ?: return null
 
-        // Try to get from diff request title
-        val diffRequest = e.getData(DiffDataKeys.DIFF_REQUEST)
-        if (diffRequest != null) {
-            val title = diffRequest.title
-            if (title != null) {
-                val relativePath = extractFilePath(title)
-                // Find the repo that contains this file
-                val repos = GitService.discoverRepos(project)
-                for (repo in repos) {
-                    if (repo.resolve(relativePath).toFile().exists()) {
-                        return repo to relativePath
-                    }
-                }
-            }
-        }
-
-        // Try to get from virtual file
-        val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        if (virtualFile != null) {
-            return GitService.getRelativePath(project, virtualFile.path)
-        }
-
-        return null
-    }
-
-    private fun extractFilePath(title: String): String {
-        return when {
-            title.startsWith("Review:") -> title.removePrefix("Review:").trim()
-            title.contains(" (") -> title.substringBefore(" (")
-            else -> title
-        }
+        return review to filePath
     }
 }

@@ -265,14 +265,12 @@ class DiffCommentExtension : DiffExtension() {
     }
 
     private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, review: Review) {
-        // Store the file path in the context for the action to access
+        // Store the file path in the context for the MarkFileReviewedAction to access
         context.putUserData(FILE_PATH_KEY, filePath)
-        context.putUserData(BASE_PATH_KEY, review.repoRoot.toString())
     }
 
     companion object {
         val FILE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.FilePath")
-        val BASE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.BasePath")
 
         /**
          * Suppresses the outer editor context so that editor actions don't steal key events
