@@ -13,7 +13,7 @@ class ReviewBranchChangeListener(private val project: Project) : BranchChangeLis
 
     override fun branchHasChanged(branchName: String) {
         // Refresh the review panel when branch changes
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Code Review")
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Review Duet")
         toolWindow?.contentManager?.contents?.forEach { content ->
             (content.component as? ReviewPanel)?.refresh()
         }

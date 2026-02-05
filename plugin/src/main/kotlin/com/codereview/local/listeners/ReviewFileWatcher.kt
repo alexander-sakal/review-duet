@@ -35,7 +35,7 @@ class ReviewFileWatcher(private val project: Project) : BulkFileListener {
 
     private fun getReviewPanel(): ReviewPanel? {
         val toolWindow = ToolWindowManager.getInstance(project)
-            .getToolWindow("Code Review") ?: return null
+            .getToolWindow("Review Duet") ?: return null
 
         val content = toolWindow.contentManager.getContent(0) ?: return null
         return content.component as? ReviewPanel

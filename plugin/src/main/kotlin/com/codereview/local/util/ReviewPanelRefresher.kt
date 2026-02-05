@@ -25,7 +25,7 @@ object ReviewPanelRefresher {
 
     private fun doRefresh(project: Project) {
         val toolWindow = ToolWindowManager.getInstance(project)
-            .getToolWindow("Code Review") ?: return
+            .getToolWindow("Review Duet") ?: return
 
         val content = toolWindow.contentManager.getContent(0) ?: return
         val panel = content.component as? ReviewPanel ?: return
