@@ -1,8 +1,8 @@
 package com.codereview.local.actions
 
 import com.codereview.local.diff.ReviewDiffVirtualFile
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -20,8 +20,8 @@ class OpenReviewDiffAction : AnAction("Open Review Diff", "Open diff view for cu
         // Find the repo that contains this file
         val (repoRoot, relativePath) = GitService.getRelativePath(project, vFile.path) ?: return
 
-        val reviewService = ReviewService(repoRoot)
-        val reviewData = reviewService.loadReviewData() ?: return
+        val review = Review.forCurrentBranch(repoRoot)
+        val reviewData = review.loadData() ?: return
 
         // Create and open virtual file
         val reviewDiffFile = ReviewDiffVirtualFile(project, relativePath, reviewData.baseCommit)
@@ -35,8 +35,8 @@ class OpenReviewDiffAction : AnAction("Open Review Diff", "Open diff view for cu
         val enabled = if (project != null && vFile != null) {
             val pathInfo = GitService.getRelativePath(project, vFile.path)
             if (pathInfo != null) {
-                val reviewService = ReviewService(pathInfo.first)
-                reviewService.hasActiveReview()
+                val review = Review.forCurrentBranch(pathInfo.first)
+                review.hasActiveReview()
             } else {
                 false
             }

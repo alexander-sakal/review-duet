@@ -1,25 +1,27 @@
-package com.codereview.local.services
+package com.codereview.local.model
 
-import com.codereview.local.model.*
+import com.codereview.local.services.GitService
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.io.path.*
 
-class ReviewService(private val projectRoot: Path) {
-
-    private val gitService = GitService(projectRoot)
-    private val reviewDuetDir: Path = projectRoot.resolve(".review-duet")
+/**
+ * Represents an active review session.
+ * Encapsulates the repo root, review file path, and all review operations.
+ * Pass this single object instead of separate repoRoot + reviewFilePath parameters.
+ */
+class Review(
+    val repoRoot: Path,
+    val filePath: Path
+) {
+    val gitService = GitService(repoRoot)
+    private val reviewDuetDir: Path = repoRoot.resolve(".review-duet")
     private val serializer = ReviewDataSerializer()
 
     private var cachedData: ReviewData? = null
 
-    private fun getCommentsFile(): Path {
-        val branch = gitService.getCurrentBranch() ?: "main"
-        return reviewDuetDir.resolve("$branch.json")
-    }
-
     private fun ensureGitignore() {
-        val gitignore = projectRoot.resolve(".gitignore")
+        val gitignore = repoRoot.resolve(".gitignore")
         val entry = ".review-duet/"
         var modified = false
 
@@ -44,18 +46,17 @@ class ReviewService(private val projectRoot: Path) {
         }
     }
 
-    fun hasActiveReview(): Boolean = getCommentsFile().exists()
+    fun hasActiveReview(): Boolean = filePath.exists()
 
-    fun loadReviewData(): ReviewData? {
+    fun loadData(): ReviewData? {
         if (!hasActiveReview()) {
             cachedData = null
             return null
         }
 
-        // Return cached data if available
         cachedData?.let { return it }
 
-        val json = getCommentsFile().readText()
+        val json = filePath.readText()
         cachedData = serializer.deserialize(json)
         return cachedData
     }
@@ -64,33 +65,32 @@ class ReviewService(private val projectRoot: Path) {
      * Force reload from disk, bypassing cache.
      * Use when external changes may have occurred.
      */
-    fun reloadReviewData(): ReviewData? {
+    fun reloadData(): ReviewData? {
         cachedData = null
-        return loadReviewData()
+        return loadData()
     }
 
-    fun saveReviewData(data: ReviewData) {
+    fun saveData(data: ReviewData) {
         if (!reviewDuetDir.exists()) {
             reviewDuetDir.createDirectories()
             ensureGitignore()
         }
-        getCommentsFile().writeText(serializer.serialize(data))
+        filePath.writeText(serializer.serialize(data))
         cachedData = data
     }
 
-    fun initializeReview(baseCommit: String) {
+    fun initialize(baseCommit: String) {
         val data = ReviewData(
             version = 1,
             baseCommit = baseCommit,
             comments = mutableListOf()
         )
-        saveReviewData(data)
+        saveData(data)
     }
 
     fun addComment(file: String, line: Int, text: String) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
 
-        // Store current HEAD - the commit the user is looking at when adding the comment
         val currentCommit = gitService.getCurrentCommitSha() ?: "HEAD"
 
         val comment = Comment(
@@ -110,55 +110,54 @@ class ReviewService(private val projectRoot: Path) {
         )
 
         data.comments.add(comment)
-        saveReviewData(data)
+        saveData(data)
     }
 
     fun updateCommentStatus(commentId: Int, status: CommentStatus) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         val comment = data.getComment(commentId) ?: throw IllegalArgumentException("Comment not found")
 
         comment.status = status
-        saveReviewData(data)
+        saveData(data)
     }
 
     fun updateCommentText(commentId: Int, newText: String) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         val comment = data.getComment(commentId) ?: throw IllegalArgumentException("Comment not found")
 
         val lastEntry = comment.thread.lastOrNull()
         if (lastEntry != null) {
             val updatedEntry = lastEntry.copy(text = newText)
             comment.thread[comment.thread.lastIndex] = updatedEntry
-            saveReviewData(data)
+            saveData(data)
         }
     }
 
     fun deleteComment(commentId: Int) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         data.comments.removeIf { it.id == commentId }
-        saveReviewData(data)
+        saveData(data)
     }
 
-
     fun isFileReviewed(filePath: String): Boolean {
-        val data = loadReviewData() ?: return false
+        val data = loadData() ?: return false
         return data.isFileReviewed(filePath)
     }
 
     fun markFileReviewed(filePath: String) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         data.markFileReviewed(filePath)
-        saveReviewData(data)
+        saveData(data)
     }
 
     fun unmarkFileReviewed(filePath: String) {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         data.unmarkFileReviewed(filePath)
-        saveReviewData(data)
+        saveData(data)
     }
 
     fun toggleFileReviewed(filePath: String): Boolean {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         val isNowReviewed = if (data.isFileReviewed(filePath)) {
             data.unmarkFileReviewed(filePath)
             false
@@ -166,30 +165,28 @@ class ReviewService(private val projectRoot: Path) {
             data.markFileReviewed(filePath)
             true
         }
-        saveReviewData(data)
+        saveData(data)
         return isNowReviewed
     }
 
     fun getReviewedFilesCount(): Int {
-        val data = loadReviewData() ?: return 0
+        val data = loadData() ?: return 0
         return data.reviewedFiles.size
     }
 
     /**
      * Accept all reviewed changes and advance the baseline to current HEAD.
-     * This completes the current review phase and prepares for the next batch of changes.
      */
     fun acceptChanges() {
-        val data = loadReviewData() ?: throw IllegalStateException("No active review")
+        val data = loadData() ?: throw IllegalStateException("No active review")
         val currentHead = gitService.getCurrentCommitSha() ?: throw IllegalStateException("Cannot get current commit")
 
-        // Move baseline to current HEAD and clear reviewed files
         val updatedData = data.copy(
             baseCommit = currentHead,
             reviewedFiles = mutableSetOf()
         )
 
-        saveReviewData(updatedData)
+        saveData(updatedData)
         cachedData = null
     }
 
@@ -197,11 +194,23 @@ class ReviewService(private val projectRoot: Path) {
      * Check if there are any changes to review (between baseCommit and HEAD)
      */
     fun hasChangesToReview(): Boolean {
-        val data = loadReviewData() ?: return false
+        val data = loadData() ?: return false
         val currentHead = gitService.getCurrentCommitSha() ?: return false
         if (data.baseCommit == currentHead) return false
 
         val changedFiles = gitService.getChangedFilePaths(data.baseCommit, currentHead)
         return changedFiles.isNotEmpty()
+    }
+
+    companion object {
+        /**
+         * Create a Review for the current branch in the given repo.
+         */
+        fun forCurrentBranch(repoRoot: Path): Review {
+            val gitService = GitService(repoRoot)
+            val branch = gitService.getCurrentBranch() ?: "main"
+            val filePath = repoRoot.resolve(".review-duet").resolve("$branch.json")
+            return Review(repoRoot, filePath)
+        }
     }
 }

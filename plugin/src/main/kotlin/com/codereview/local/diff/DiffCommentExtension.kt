@@ -2,8 +2,7 @@ package com.codereview.local.diff
 
 import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
-import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
+import com.codereview.local.model.Review
 import com.codereview.local.util.ReviewPanelRefresher
 import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
@@ -50,7 +49,6 @@ import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.KeyboardFocusManager
 import java.awt.event.KeyEvent
-import java.nio.file.Path
 import javax.swing.*
 
 class DiffCommentExtension : DiffExtension() {
@@ -66,41 +64,37 @@ class DiffCommentExtension : DiffExtension() {
         // Extract file path from title
         val filePath = extractFilePath(title)
 
-        // Find the repo that contains this file
-        val repos = GitService.discoverRepos(project)
-        val repoRoot = repos.find { repo ->
-            repo.resolve(filePath).toFile().exists()
-        } ?: return
-        val basePath = repoRoot.toString()
+        // Get review from request (passed from ChangesPanel)
+        val review = request.getUserData(com.codereview.local.ui.ChangesPanel.REVIEW_KEY) ?: return
 
         val commentInlays = mutableListOf<Inlay<*>>()
 
-        setupGutterComments(editor, filePath, basePath, project, commentInlays)
+        setupGutterComments(editor, filePath, review, project, commentInlays)
 
         // Add reviewed action to context
-        setupReviewedAction(viewer, context, filePath, basePath)
+        setupReviewedAction(viewer, context, filePath, review)
 
         // Add custom review toolbar only for comment review diffs
         val isCommentReview = request.getUserData(com.codereview.local.ui.ChangesPanel.IS_COMMENT_REVIEW_KEY) == true
         val commentId = request.getUserData(com.codereview.local.ui.ChangesPanel.COMMENT_ID_KEY)
         if (isCommentReview && commentId != null) {
             SwingUtilities.invokeLater {
-                addReviewToolbar(viewer, project, filePath, basePath, commentId)
+                addReviewToolbar(viewer, project, filePath, review, commentId)
             }
         }
 
         // Display existing comments
         SwingUtilities.invokeLater {
-            displayComments(editor, filePath, basePath, commentInlays)
+            displayComments(editor, filePath, review, commentInlays)
         }
     }
 
-    private fun addReviewToolbar(viewer: TwosideTextDiffViewer, project: Project, filePath: String, basePath: String, commentId: Int) {
+    private fun addReviewToolbar(viewer: TwosideTextDiffViewer, project: Project, filePath: String, review: Review, commentId: Int) {
         val viewerComponent = viewer.component
         val parent = viewerComponent.parent as? JComponent ?: return
 
         // Create review toolbar panel
-        val toolbarPanel = createReviewToolbarPanel(project, filePath, basePath, commentId) {
+        val toolbarPanel = createReviewToolbarPanel(project, filePath, review, commentId) {
             // Callback to close the diff window after resolve
             SwingUtilities.getWindowAncestor(parent)?.dispose()
         }
@@ -121,9 +115,8 @@ class DiffCommentExtension : DiffExtension() {
         }
     }
 
-    private fun createReviewToolbarPanel(project: Project, filePath: String, basePath: String, commentId: Int, onResolve: () -> Unit): JComponent {
-        val reviewService = ReviewService(Path.of(basePath))
-        val reviewData = reviewService.loadReviewData()
+    private fun createReviewToolbarPanel(project: Project, filePath: String, review: Review, commentId: Int, onResolve: () -> Unit): JComponent {
+        val reviewData = review.loadData()
         val comment = reviewData?.getComment(commentId)
 
         val separatorColor = JBColor(Color(0, 0, 0, 25), Color(255, 255, 255, 25))
@@ -207,11 +200,11 @@ class DiffCommentExtension : DiffExtension() {
             toolTipText = "Mark comment as resolved"
             isEnabled = comment?.status == CommentStatus.FIXED
             addActionListener {
-                reviewService.updateCommentStatus(commentId, CommentStatus.RESOLVED)
+                review.updateCommentStatus(commentId, CommentStatus.RESOLVED)
                 ReviewPanelRefresher.refresh(project)
 
                 // Update remaining count
-                val updatedData = reviewService.loadReviewData()
+                val updatedData = review.loadData()
                 val remainingComments = updatedData?.comments
                     ?.filter { it.status == CommentStatus.FIXED }
                     ?: emptyList()
@@ -237,7 +230,7 @@ class DiffCommentExtension : DiffExtension() {
             toolTipText = "Go to next comment"
             isEnabled = hasNext
             addActionListener {
-                val updatedData = reviewService.loadReviewData()
+                val updatedData = review.loadData()
                 val remainingComments = updatedData?.comments
                     ?.filter { it.status == CommentStatus.FIXED }
                     ?.sortedBy { it.id }
@@ -255,7 +248,7 @@ class DiffCommentExtension : DiffExtension() {
                     nextComment.resolveCommit?.let { commit ->
                         val window = SwingUtilities.getWindowAncestor(this)
                         val bounds = window?.bounds
-                        com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, commit, nextComment.file, nextComment.id, bounds)
+                        com.codereview.local.ui.ChangesPanel.openDiffForSingleCommit(project, review, commit, nextComment.file, nextComment.id, bounds)
                         window?.dispose()
                     }
                 }
@@ -271,10 +264,10 @@ class DiffCommentExtension : DiffExtension() {
         return panel
     }
 
-    private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, basePath: String) {
+    private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, review: Review) {
         // Store the file path in the context for the action to access
         context.putUserData(FILE_PATH_KEY, filePath)
-        context.putUserData(BASE_PATH_KEY, basePath)
+        context.putUserData(BASE_PATH_KEY, review.repoRoot.toString())
     }
 
     companion object {
@@ -335,20 +328,19 @@ class DiffCommentExtension : DiffExtension() {
     private fun displayComments(
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>
     ) {
-        refreshCommentInlays(editor, filePath, basePath, commentInlays)
+        refreshCommentInlays(editor, filePath, review, commentInlays)
     }
 
     private fun refreshCommentInlays(
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>
     ) {
-        val reviewService = ReviewService(Path.of(basePath))
-        val reviewData = reviewService.loadReviewData() ?: return
+        val reviewData = review.loadData() ?: return
 
         commentInlays.forEach { it.dispose() }
         commentInlays.clear()
@@ -366,7 +358,7 @@ class DiffCommentExtension : DiffExtension() {
             if (line >= 0 && line < editor.document.lineCount) {
                 val offset = editor.document.getLineEndOffset(line)
 
-                val commentPanel = createCommentPanel(comment, editor, filePath, basePath, commentInlays)
+                val commentPanel = createCommentPanel(comment, editor, filePath, review, commentInlays)
                 val wrappedPanel = EditorWidthPanel(editorImpl, commentPanel)
 
                 val properties = EditorEmbeddedComponentManager.Properties(
@@ -422,7 +414,7 @@ class DiffCommentExtension : DiffExtension() {
         comment: Comment,
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>
     ): JComponent {
         val colorsScheme = EditorColorsManager.getInstance().globalScheme
@@ -446,7 +438,7 @@ class DiffCommentExtension : DiffExtension() {
         var editPanel: JComponent? = null
 
         displayPanel = createDisplayPanel(
-            comment, editor, filePath, basePath, commentInlays,
+            comment, editor, filePath, review, commentInlays,
             bgColor, fgColor, borderColor, inlayPadding, verticalGap
         ) {
             currentCard = editPanel
@@ -456,8 +448,8 @@ class DiffCommentExtension : DiffExtension() {
         }
 
         editPanel = createEditPanel(
-            comment, editor, filePath, basePath, commentInlays,
-            bgColor, fgColor, borderColor, inlayPadding
+            comment, editor, filePath, review, commentInlays,
+            bgColor, fgColor, borderColor, inlayPadding,
         ) {
             currentCard = displayPanel
             cardLayout.show(cardPanel, "display")
@@ -481,7 +473,7 @@ class DiffCommentExtension : DiffExtension() {
         comment: Comment,
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>,
         bgColor: Color,
         fgColor: Color,
@@ -542,8 +534,8 @@ class DiffCommentExtension : DiffExtension() {
                     com.intellij.openapi.ui.Messages.getQuestionIcon()
                 )
                 if (result == com.intellij.openapi.ui.Messages.YES) {
-                    ReviewService(Path.of(basePath)).deleteComment(comment.id)
-                    refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                    review.deleteComment(comment.id)
+                    refreshCommentInlays(editor, filePath, review, commentInlays)
                     editor.project?.let { ReviewPanelRefresher.refresh(it) }
                 }
             }
@@ -622,7 +614,7 @@ class DiffCommentExtension : DiffExtension() {
         comment: Comment,
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>,
         bgColor: Color,
         fgColor: Color,
@@ -630,7 +622,6 @@ class DiffCommentExtension : DiffExtension() {
         inlayPadding: Int,
         onCancel: () -> Unit
     ): JComponent {
-        val reviewService = ReviewService(Path.of(basePath))
         val lastEntry = comment.thread.lastOrNull()
         val originalText = lastEntry?.text ?: ""
 
@@ -678,10 +669,10 @@ class DiffCommentExtension : DiffExtension() {
         val saveAndRefresh = {
             val newText = textArea.text.trim()
             if (newText.isNotBlank() && newText != originalText) {
-                reviewService.updateCommentText(comment.id, newText)
+                review.updateCommentText(comment.id, newText)
                 editor.project?.let { ReviewPanelRefresher.refresh(it) }
             }
-            refreshCommentInlays(editor, filePath, basePath, commentInlays)
+            refreshCommentInlays(editor, filePath, review, commentInlays)
         }
 
         buttonPanel.add(JButton("Cancel").apply {
@@ -874,7 +865,7 @@ class DiffCommentExtension : DiffExtension() {
     private fun setupGutterComments(
         editor: Editor,
         filePath: String,
-        basePath: String,
+        review: Review,
         project: Project,
         commentInlays: MutableList<Inlay<*>>
     ) {
@@ -904,7 +895,7 @@ class DiffCommentExtension : DiffExtension() {
                         HighlighterTargetArea.LINES_IN_RANGE
                     ).apply {
                         gutterIconRenderer = AddCommentGutterIcon(
-                            editor, project, filePath, line + 1, basePath, commentInlays
+                            editor, project, filePath, line + 1, review, commentInlays
                         )
                     }
                 }
@@ -925,12 +916,10 @@ class DiffCommentExtension : DiffExtension() {
         project: Project,
         filePath: String,
         line: Int,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>
     ) {
-        val reviewService = ReviewService(Path.of(basePath))
-
-        if (!reviewService.hasActiveReview()) {
+        if (!review.hasActiveReview()) {
             JBPopupFactory.getInstance()
                 .createMessage("No active review. Start feature development first.")
                 .showInBestPositionFor(editor)
@@ -947,7 +936,7 @@ class DiffCommentExtension : DiffExtension() {
             Unit
         }
 
-        val formPanel = createNewCommentPanel(editor, project, filePath, line, basePath, commentInlays, onDismiss)
+        val formPanel = createNewCommentPanel(editor, project, filePath, line, review, commentInlays, onDismiss)
         val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
 
         val properties = EditorEmbeddedComponentManager.Properties(
@@ -968,11 +957,10 @@ class DiffCommentExtension : DiffExtension() {
         project: Project,
         filePath: String,
         line: Int,
-        basePath: String,
+        review: Review,
         commentInlays: MutableList<Inlay<*>>,
         onDismiss: () -> Unit
     ): JComponent {
-        val reviewService = ReviewService(Path.of(basePath))
         val colorsScheme = EditorColorsManager.getInstance().globalScheme
         val bgColor = colorsScheme.defaultBackground
         val fgColor = colorsScheme.defaultForeground
@@ -1022,8 +1010,8 @@ class DiffCommentExtension : DiffExtension() {
         val submitAction = {
             val text = textArea.text.trim()
             if (text.isNotBlank()) {
-                reviewService.addComment(filePath, line, text)
-                refreshCommentInlays(editor, filePath, basePath, commentInlays)
+                review.addComment(filePath, line, text)
+                refreshCommentInlays(editor, filePath, review, commentInlays)
                 ReviewPanelRefresher.refresh(project)
             }
             onDismiss()
@@ -1073,7 +1061,7 @@ class DiffCommentExtension : DiffExtension() {
         private val project: Project,
         private val filePath: String,
         private val line: Int,
-        private val basePath: String,
+        private val review: Review,
         private val commentInlays: MutableList<Inlay<*>>
     ) : GutterIconRenderer() {
 
@@ -1083,7 +1071,7 @@ class DiffCommentExtension : DiffExtension() {
 
         override fun getClickAction(): AnAction = object : AnAction() {
             override fun actionPerformed(e: AnActionEvent) {
-                showInlineCommentForm(editor, project, filePath, line, basePath, commentInlays)
+                showInlineCommentForm(editor, project, filePath, line, review, commentInlays)
             }
         }
 

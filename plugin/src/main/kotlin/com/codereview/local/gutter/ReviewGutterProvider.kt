@@ -1,8 +1,8 @@
 package com.codereview.local.gutter
 
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -26,10 +26,10 @@ class ReviewGutterProvider : LineMarkerProvider {
         // Find the repo that contains this file
         val (repoRoot, relativePath) = GitService.getRelativePath(project, file.path) ?: return null
 
-        val service = ReviewService(repoRoot)
-        if (!service.hasActiveReview()) return null
+        val review = Review.forCurrentBranch(repoRoot)
+        if (!review.hasActiveReview()) return null
 
-        val data = service.loadReviewData() ?: return null
+        val data = review.loadData() ?: return null
 
         // Find comments for this file and line
         val document = com.intellij.psi.PsiDocumentManager.getInstance(project)

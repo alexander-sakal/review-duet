@@ -2,8 +2,8 @@ package com.codereview.local.ui
 
 import com.codereview.local.model.CommentStatus
 import com.codereview.local.model.CommitInfo
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
@@ -45,17 +45,15 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private var selectedRepoPath: Path = basePath
     private var repoComboBox: JComboBox<String>? = null
 
-    private var reviewService: ReviewService = ReviewService(basePath)
-    private var gitService: GitService = GitService(basePath)
-    private var changesPanel: ChangesPanel = ChangesPanel(project, gitService)
+    private var review: Review = Review.forCurrentBranch(basePath)
+    private var changesPanel: ChangesPanel = ChangesPanel(project, review)
 
     /**
      * Returns the path to the currently active review file, or null if no review is active.
      * Used by FileWatcher to only refresh when the active review file changes.
      */
     fun getActiveReviewFilePath(): String? {
-        val branch = gitService.getCurrentBranch() ?: return null
-        return selectedRepoPath.resolve(".review-duet").resolve("$branch.json").toString()
+        return review.filePath.toString()
     }
 
     init {
@@ -94,17 +92,15 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             if (selectedRepoPath !in availableRepos) {
                 selectedRepoPath = availableRepos.first()
             }
-            reviewService = ReviewService(selectedRepoPath)
-            gitService = GitService(selectedRepoPath)
-            changesPanel = ChangesPanel(project, gitService)
+            review = Review.forCurrentBranch(selectedRepoPath)
+            changesPanel = ChangesPanel(project, review)
         }
     }
 
     private fun onRepoSelected(repoPath: Path) {
         selectedRepoPath = repoPath
-        reviewService = ReviewService(repoPath)
-        gitService = GitService(repoPath)
-        changesPanel = ChangesPanel(project, gitService)
+        review = Review.forCurrentBranch(repoPath)
+        changesPanel = ChangesPanel(project, review)
         refresh()
     }
 
@@ -115,8 +111,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         }
 
         // Validate data BEFORE destroying UI to prevent empty panel on transient errors
-        val hasActiveReview = reviewService.hasActiveReview()
-        val reviewData = if (hasActiveReview) reviewService.reloadReviewData() else null
+        val hasActiveReview = review.hasActiveReview()
+        val reviewData = if (hasActiveReview) review.reloadData() else null
 
         // If we have an active review but can't load data, keep current UI (transient error)
         if (hasActiveReview && reviewData == null) {
@@ -206,7 +202,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             }
 
             // Branch display
-            val currentBranch = gitService.getCurrentBranch() ?: "unknown"
+            val currentBranch = review.gitService.getCurrentBranch() ?: "unknown"
             val branchLabel = JBLabel("Branch: $currentBranch")
             add(branchLabel, gbc)
 
@@ -219,9 +215,9 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             // Commit dropdown
             gbc.gridy++
             gbc.insets = JBUI.insets(5, 0, 5, 0)
-            val commits = gitService.getRecentCommits(100)
-            val baseBranch = gitService.getBaseBranch()
-            val newCommitShas = baseBranch?.let { gitService.getNewCommitShas(it) } ?: emptySet()
+            val commits = review.gitService.getRecentCommits(100)
+            val baseBranch = review.gitService.getBaseBranch()
+            val newCommitShas = baseBranch?.let { review.gitService.getNewCommitShas(it) } ?: emptySet()
             commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
                 if (commits.isNotEmpty()) selectedIndex = 0
                 renderer = CommitCellRenderer(newCommitShas)
@@ -270,13 +266,13 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private fun showActiveReviewPanel(data: com.codereview.local.model.ReviewData) {
         // Header - show repo, branch, base commit and progress
-        val commitInfo = gitService.getCommitInfo(data.baseCommit)
+        val commitInfo = review.gitService.getCommitInfo(data.baseCommit)
         val commitDisplay = if (commitInfo != null) {
             "${commitInfo.shortSha} ${commitInfo.message}"
         } else {
             data.baseCommit.take(7)
         }
-        val currentBranch = gitService.getCurrentBranch() ?: "unknown"
+        val currentBranch = review.gitService.getCurrentBranch() ?: "unknown"
         val headerPanel = JBPanel<JBPanel<*>>().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             border = JBUI.Borders.empty(0, 10, 4, 10)
@@ -333,10 +329,11 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val commentsContent = JBPanel<JBPanel<*>>(BorderLayout()).apply {
             val commentList = CommentListPanel(
                 project,
+                review,
                 sortedComments,
                 onCommentSelected = { comment -> showCommentDetails(comment) },
                 onStatusChange = { comment, status ->
-                    reviewService.updateCommentStatus(comment.id, status)
+                    review.updateCommentStatus(comment.id, status)
                     refresh()
                 }
             )
@@ -377,11 +374,11 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val popup = CommentPopup(
             comment = comment,
             onStatusChange = { status ->
-                reviewService.updateCommentStatus(comment.id, status)
+                review.updateCommentStatus(comment.id, status)
                 refresh()
             },
             onDelete = {
-                reviewService.deleteComment(comment.id)
+                review.deleteComment(comment.id)
                 refresh()
             }
         )
@@ -401,7 +398,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
         // Get parent of selected commit as the baseline
         // This way "review from commit X" means X is included in the review
-        val parentSha = gitService.getParentCommitSha(selectedCommit.sha)
+        val parentSha = review.gitService.getParentCommitSha(selectedCommit.sha)
         if (parentSha == null) {
             com.intellij.openapi.ui.Messages.showErrorDialog(
                 project,
@@ -411,12 +408,12 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             return
         }
 
-        reviewService.initializeReview(parentSha)
+        review.initialize(parentSha)
         refresh()
     }
 
     private fun endReview() {
-        val branch = gitService.getCurrentBranch() ?: "unknown"
+        val branch = review.gitService.getCurrentBranch() ?: "unknown"
         val result = com.intellij.openapi.ui.Messages.showYesNoDialog(
             project,
             "End this review session? The review file for branch '$branch' will be deleted.",

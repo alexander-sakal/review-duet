@@ -10,12 +10,12 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.io.path.readText
 
-class ReviewServiceTest {
+class ReviewTest {
 
     @TempDir
     lateinit var tempDir: Path
 
-    private lateinit var service: ReviewService
+    private lateinit var review: Review
 
     @BeforeEach
     fun setup() {
@@ -43,12 +43,12 @@ class ReviewServiceTest {
             .start()
             .waitFor()
 
-        service = ReviewService(tempDir)
+        review = Review.forCurrentBranch(tempDir)
     }
 
     @Test
     fun `should return false when no review exists`() {
-        assertFalse(service.hasActiveReview())
+        assertFalse(review.hasActiveReview())
     }
 
     @Test
@@ -61,7 +61,7 @@ class ReviewServiceTest {
             {"version": 1, "baseCommit": "abc1234", "comments": []}
         """.trimIndent())
 
-        assertTrue(service.hasActiveReview())
+        assertTrue(review.hasActiveReview())
     }
 
     @Test
@@ -79,7 +79,7 @@ class ReviewServiceTest {
             }
         """.trimIndent())
 
-        val data = service.loadReviewData()
+        val data = review.loadData()
 
         assertNotNull(data)
         assertEquals("abc1234", data?.baseCommit)
@@ -95,9 +95,9 @@ class ReviewServiceTest {
 
     @Test
     fun `should initialize new review`() {
-        service.initializeReview("abc1234")
+        review.initialize("abc1234")
 
-        val data = service.loadReviewData()
+        val data = review.loadData()
         assertNotNull(data)
         assertEquals("abc1234", data?.baseCommit)
         assertTrue(data?.comments?.isEmpty() == true)
@@ -105,11 +105,11 @@ class ReviewServiceTest {
 
     @Test
     fun `should add comment`() {
-        service.initializeReview("abc1234")
+        review.initialize("abc1234")
 
-        service.addComment("src/Test.kt", 42, "Fix this bug")
+        review.addComment("src/Test.kt", 42, "Fix this bug")
 
-        val data = service.loadReviewData()
+        val data = review.loadData()
         assertEquals(1, data?.comments?.size)
         assertEquals("src/Test.kt", data?.comments?.get(0)?.file)
         assertEquals(42, data?.comments?.get(0)?.line)

@@ -1,7 +1,7 @@
 package com.codereview.local.actions
 
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.codereview.local.util.ReviewPanelRefresher
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -25,10 +25,10 @@ class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at
             return
         }
 
-        val reviewService = ReviewService(repoRoot)
+        val review = Review.forCurrentBranch(repoRoot)
 
         // Check if there's an active review
-        if (!reviewService.hasActiveReview()) {
+        if (!review.hasActiveReview()) {
             Messages.showWarningDialog(
                 project,
                 "No active review. Start feature development first from the Code Review panel.",
@@ -46,7 +46,7 @@ class AddCommentAction : AnAction("Add Review Comment", "Add a review comment at
         if (dialog.showAndGet()) {
             val commentText = dialog.getCommentText()
             if (commentText.isNotBlank()) {
-                reviewService.addComment(relativePath, line, commentText)
+                review.addComment(relativePath, line, commentText)
                 ReviewPanelRefresher.refresh(project)
                 Messages.showInfoMessage(
                     project,

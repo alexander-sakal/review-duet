@@ -1,8 +1,8 @@
 package com.codereview.local.actions
 
 import com.codereview.local.diff.DiffCommentExtension
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.intellij.diff.tools.util.DiffDataKeys
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -16,8 +16,8 @@ class MarkFileReviewedAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val (repoRoot, filePath) = getPathsFromEvent(e) ?: return
 
-        val reviewService = ReviewService(repoRoot)
-        reviewService.toggleFileReviewed(filePath)
+        val review = Review.forCurrentBranch(repoRoot)
+        review.toggleFileReviewed(filePath)
     }
 
     override fun update(e: AnActionEvent) {
@@ -29,14 +29,14 @@ class MarkFileReviewedAction : AnAction() {
         }
 
         val (repoRoot, filePath) = paths
-        val reviewService = ReviewService(repoRoot)
+        val review = Review.forCurrentBranch(repoRoot)
 
-        if (!reviewService.hasActiveReview()) {
+        if (!review.hasActiveReview()) {
             e.presentation.isEnabledAndVisible = false
             return
         }
 
-        val isReviewed = reviewService.isFileReviewed(filePath)
+        val isReviewed = review.isFileReviewed(filePath)
         e.presentation.isEnabledAndVisible = true
         e.presentation.icon = if (isReviewed) AllIcons.Actions.Checked else AllIcons.General.InspectionsEye
         e.presentation.text = if (isReviewed) "Reviewed" else "Mark Reviewed"

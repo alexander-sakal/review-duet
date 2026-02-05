@@ -2,8 +2,8 @@ package com.codereview.local.ui
 
 import com.codereview.local.model.ChangeType
 import com.codereview.local.model.ChangedFile
+import com.codereview.local.model.Review
 import com.codereview.local.services.GitService
-import com.codereview.local.services.ReviewService
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManager
@@ -40,48 +40,28 @@ import javax.swing.tree.DefaultTreeModel
 
 class ChangesPanel(
     private val project: Project,
-    private val gitService: GitService
+    private val review: Review
 ) : JPanel(BorderLayout()) {
+    private val gitService = review.gitService
 
     companion object {
         val IS_COMMENT_REVIEW_KEY = com.intellij.openapi.util.Key.create<Boolean>("CodeReview.IsCommentReview")
         val COMMENT_ID_KEY = com.intellij.openapi.util.Key.create<Int>("CodeReview.CommentId")
-
-        /**
-         * Find the repo that contains the given relative file path.
-         * Falls back to first discovered repo if not found.
-         */
-        private fun findRepoForRelativePath(project: Project, filePath: String?): Path? {
-            val repos = GitService.discoverRepos(project)
-            if (repos.isEmpty()) return null
-
-            if (filePath != null) {
-                // Try to find which repo contains this file
-                val repo = repos.find { it.resolve(filePath).toFile().exists() }
-                if (repo != null) return repo
-            }
-
-            // Fall back to first repo
-            return repos.first()
-        }
+        val REVIEW_KEY = com.intellij.openapi.util.Key.create<Review>("CodeReview.Review")
 
         /**
          * Open diff view showing changes in a single commit (commit^ to commit)
          */
-        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null, windowBounds: Rectangle? = null) {
-            val repoRoot = findRepoForRelativePath(project, filePath) ?: return
-            val gitService = GitService(repoRoot)
-
-            val parentCommit = gitService.getParentCommitSha(commitSha) ?: return
-            openDiffBetweenCommits(project, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId, windowBounds = windowBounds)
+        fun openDiffForSingleCommit(project: Project, review: Review, commitSha: String, filePath: String? = null, commentId: Int? = null, windowBounds: Rectangle? = null) {
+            val parentCommit = review.gitService.getParentCommitSha(commitSha) ?: return
+            openDiffBetweenCommits(project, review, parentCommit, commitSha, filePath, isCommentReview = true, commentId = commentId, windowBounds = windowBounds)
         }
 
         /**
          * Open diff view showing changes between two commits
          */
-        fun openDiffBetweenCommits(project: Project, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null, windowBounds: Rectangle? = null) {
-            val repoRoot = findRepoForRelativePath(project, filePath) ?: return
-            val gitService = GitService(repoRoot)
+        fun openDiffBetweenCommits(project: Project, review: Review, fromCommit: String, toCommit: String, filePath: String? = null, isCommentReview: Boolean = false, commentId: Int? = null, windowBounds: Rectangle? = null) {
+            val gitService = review.gitService
 
             // Get files changed between commits
             val changedFiles = gitService.getChangedFiles(fromCommit, toCommit)
@@ -121,6 +101,9 @@ class ChangesPanel(
                             toShort
                         )
 
+                        // Always pass review info
+                        request.putUserData(REVIEW_KEY, review)
+
                         // Mark as comment review if applicable
                         if (isCommentReview) {
                             request.putUserData(IS_COMMENT_REVIEW_KEY, true)
@@ -154,8 +137,6 @@ class ChangesPanel(
             }
         }
     }
-
-    private val reviewService: ReviewService by lazy { ReviewService(gitService.projectRoot) }
 
     private val rootNode = DefaultMutableTreeNode("Changes")
     private val treeModel = DefaultTreeModel(rootNode)
@@ -228,7 +209,7 @@ class ChangesPanel(
     }
 
     private fun refreshFileList() {
-        val data = reviewService.reloadReviewData()
+        val data = review.reloadData()
         baseCommit = data?.baseCommit
         // Cache reviewed files for O(1) lookup in renderer
         reviewedFilesCache = data?.reviewedFiles ?: emptySet()
@@ -352,13 +333,18 @@ class ChangesPanel(
                     val fileType = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
 
                     val contentFactory = DiffContentFactory.getInstance()
-                    return SimpleDiffRequest(
+                    val request = SimpleDiffRequest(
                         "${file.path} ($shortRef → Working Copy)",
                         contentFactory.create(project, fromContent, fileType),
                         contentFactory.create(project, toContent, fileType),
                         shortRef,
                         "Working Copy"
                     )
+
+                    // Pass review to diff extension
+                    request.putUserData(REVIEW_KEY, review)
+
+                    return request
                 }
             }
         }

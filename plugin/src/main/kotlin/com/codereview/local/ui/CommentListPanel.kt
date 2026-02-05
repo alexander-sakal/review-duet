@@ -2,6 +2,7 @@ package com.codereview.local.ui
 
 import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
+import com.codereview.local.model.Review
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
@@ -14,6 +15,7 @@ import javax.swing.*
 
 class CommentListPanel(
     private val project: Project,
+    private val review: Review,
     private val comments: List<Comment>,
     private val onCommentSelected: (Comment) -> Unit,
     private val onStatusChange: ((Comment, CommentStatus) -> Unit)? = null
@@ -120,7 +122,7 @@ class CommentListPanel(
             })
             actionsLine.add(createLink(comment.resolveCommit!!) {
                 // Show only changes in the fix commit itself (commit^ to commit)
-                openDiffForSingleCommit(project, comment.resolveCommit!!, comment.file, comment.id)
+                ChangesPanel.openDiffForSingleCommit(project, review, comment.resolveCommit!!, comment.file, comment.id)
             })
 
             // Add Resolve link
@@ -204,9 +206,4 @@ class CommentListPanel(
         contentPanel.repaint()
     }
 
-    companion object {
-        fun openDiffForSingleCommit(project: Project, commitSha: String, filePath: String? = null, commentId: Int? = null) {
-            ChangesPanel.openDiffForSingleCommit(project, commitSha, filePath, commentId)
-        }
-    }
 }
