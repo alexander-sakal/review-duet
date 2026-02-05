@@ -30,6 +30,7 @@
             <keyboard-shortcut keymap="$default" first-keystroke="F4"/>
             <add-to-group group-id="Diff.EditorPopupMenu" anchor="first"/>
         </action>
+        <!-- TODO: Uncomment to enable "Mark Reviewed" button in diff toolbar
         <group id="CodeReview.DiffToolbarGroup">
             <separator/>
             <action id="CodeReview.MarkFileReviewed"
@@ -39,5 +40,6 @@
                     description="Toggle file reviewed status"/>
             <add-to-group group-id="Diff.ViewerToolbar" anchor="last"/>
         </group>
+        -->
     </actions>
 </idea-plugin>

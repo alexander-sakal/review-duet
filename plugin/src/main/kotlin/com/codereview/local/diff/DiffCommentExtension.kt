@@ -71,8 +71,8 @@ class DiffCommentExtension : DiffExtension() {
 
         setupGutterComments(editor, filePath, review, project, commentInlays)
 
-        // Add reviewed action to context
-        setupReviewedAction(viewer, context, filePath, review)
+        // Store file path in context for actions (GoToSourceAction, MarkFileReviewedAction)
+        context.putUserData(FILE_PATH_KEY, filePath)
 
         // Add custom review toolbar only for comment review diffs
         val isCommentReview = request.getUserData(com.codereview.local.ui.ChangesPanel.IS_COMMENT_REVIEW_KEY) == true
@@ -264,10 +264,10 @@ class DiffCommentExtension : DiffExtension() {
         return panel
     }
 
-    private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, review: Review) {
-        // Store the file path in the context for the MarkFileReviewedAction to access
-        context.putUserData(FILE_PATH_KEY, filePath)
-    }
+    // TODO: Uncomment to enable "Mark Reviewed" button in diff toolbar
+    // private fun setupReviewedAction(viewer: TwosideTextDiffViewer, context: DiffContext, filePath: String, review: Review) {
+    //     context.putUserData(FILE_PATH_KEY, filePath)
+    // }
 
     companion object {
         val FILE_PATH_KEY = com.intellij.openapi.util.Key.create<String>("CodeReview.FilePath")
