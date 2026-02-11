@@ -36,6 +36,7 @@ describe('list command', () => {
       expect(output).toContain('#1');
       expect(output).toContain('[open]');
       expect(output).toContain('src/Example.php:42');
+      expect(output).toContain('@ abc1234');
       expect(output).toContain('Fix this bug');
     });
 
