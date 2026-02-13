@@ -404,10 +404,30 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         processButton?.text = "Processing..."
         processButton?.isEnabled = false
 
+        val repoPath = selectedRepoPath.toString()
         service.runProcess(
-            workingDir = selectedRepoPath.toString(),
+            workingDir = repoPath,
             reviewFilePath = review.filePath.toString(),
-            onFinished = { refresh() }
+            onFinished = {
+                refresh()
+                com.intellij.notification.NotificationGroupManager.getInstance()
+                    .getNotificationGroup("Review Duet")
+                    .createNotification(
+                        "Review Duet",
+                        "Comments processing finished",
+                        com.intellij.notification.NotificationType.INFORMATION
+                    )
+                    .addAction(object : com.intellij.notification.NotificationAction("Show Output") {
+                        override fun actionPerformed(
+                            e: com.intellij.openapi.actionSystem.AnActionEvent,
+                            notification: com.intellij.notification.Notification
+                        ) {
+                            service.focusRunTab(repoPath)
+                            notification.expire()
+                        }
+                    })
+                    .notify(project)
+            }
         )
     }
 

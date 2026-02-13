@@ -1,16 +1,21 @@
 package com.codereview.local.services
 
+import com.google.gson.JsonParser
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ColoredProcessHandler
 import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessOutputType
 import com.intellij.execution.filters.TextConsoleBuilderFactory
+import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
+import com.intellij.openapi.wm.ToolWindowManager
 import java.io.File
 
 @Service(Service.Level.PROJECT)
@@ -58,18 +63,37 @@ class ClaudeProcessService(private val project: Project) {
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
 
         val handler = ColoredProcessHandler(commandLine)
+        val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
+        console.attachToProcess(handler)
+
+        // Collect stdout to parse the result event at the end
+        val outputLines = mutableListOf<String>()
 
         handler.addProcessListener(object : ProcessAdapter() {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                if (ProcessOutputType.isStdout(outputType)) {
+                    outputLines.add(event.text)
+                }
+            }
+
             override fun processTerminated(event: ProcessEvent) {
-                runs.remove(workingDir)
+                // Parse the result and append human-readable summary to console
+                val result = parseResult(outputLines)
+                if (result != null) {
+                    ApplicationManager.getApplication().invokeLater {
+                        console.print("\n\n--- Result ---\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                        console.print(result, ConsoleViewContentType.NORMAL_OUTPUT)
+                        console.print("\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                    }
+                }
+
+                // Don't remove from runs here — focusRunTab needs the descriptor.
+                // isRunning() handles cleanup lazily.
                 ApplicationManager.getApplication().invokeLater {
                     onFinished?.invoke()
                 }
             }
         })
-
-        val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
-        console.attachToProcess(handler)
 
         val descriptor = RunContentDescriptor(console, handler, console.component, tabName)
 
@@ -84,9 +108,32 @@ class ClaudeProcessService(private val project: Project) {
         handler.processInput?.close()
     }
 
-    private fun focusRunTab(workingDir: String) {
+    private fun parseResult(outputLines: List<String>): String? {
+        val fullOutput = outputLines.joinToString("")
+
+        for (line in fullOutput.lines()) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+            try {
+                val json = JsonParser.parseString(trimmed).asJsonObject
+                if (json.get("type")?.asString == "result") {
+                    return json.get("result")?.asString
+                }
+            } catch (_: Exception) {
+                // Skip malformed lines
+            }
+        }
+
+        return null
+    }
+
+    fun focusRunTab(workingDir: String) {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
+        toolWindow?.show()
+
+        // Try to select the specific tab
         val entry = runs[workingDir] ?: return
         val executor = DefaultRunExecutor.getRunExecutorInstance()
-        RunContentManager.getInstance(project).showRunContent(executor, entry.descriptor)
+        RunContentManager.getInstance(project).selectRunContent(entry.descriptor)
     }
 }

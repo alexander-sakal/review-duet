@@ -13,6 +13,7 @@
                     factoryClass="com.codereview.local.ui.ReviewToolWindowFactory"
                     icon="AllIcons.Actions.Annotate"/>
         <diff.DiffExtension implementation="com.codereview.local.diff.DiffCommentExtension"/>
+        <notificationGroup id="Review Duet" displayType="BALLOON"/>
     </extensions>
 
     <projectListeners>
