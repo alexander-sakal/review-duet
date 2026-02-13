@@ -48,20 +48,6 @@ function getReviewPath(options: Record<string, string>, cwd: string): string {
   return `${cwd}/.review-duet/${branch}.json`;
 }
 
-/**
- * Extract the repo root from a review file path.
- * e.g., /code/myproject/.review-duet/main.json -> /code/myproject
- */
-function getRepoRootFromReviewPath(reviewPath: string): string {
-  // Review path format: <repo-root>/.review-duet/<branch>.json
-  const reviewDuetIndex = reviewPath.lastIndexOf('/.review-duet/');
-  if (reviewDuetIndex !== -1) {
-    return reviewPath.substring(0, reviewDuetIndex);
-  }
-  // Fallback: use directory of the file
-  const path = require('path');
-  return path.dirname(path.dirname(reviewPath));
-}
 
 export function runCli(argv: string[], cwd: string = process.cwd()): string {
   const { command, args, options } = parseArgs(argv);
@@ -94,8 +80,7 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
     }
 
     case 'accept': {
-      const repoRoot = getRepoRootFromReviewPath(reviewPath);
-      return acceptChanges(store, repoRoot);
+      return acceptChanges(store);
     }
 
     case 'help':
@@ -106,7 +91,7 @@ Usage:
   review-duet list [--status=<status>]        List comments
   review-duet fix <id> --commit <sha> [--message "<text>"]  Mark as fixed
   review-duet show <id>                       Show comment details
-  review-duet accept                          Accept changes, move baseline to HEAD
+  review-duet accept                          Accept changes, clear reviewed files
 
 Global Options:
   --review=<path>  Explicit path to review file (default: .review-duet/{branch}.json)

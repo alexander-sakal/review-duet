@@ -175,14 +175,12 @@ class Review(
     }
 
     /**
-     * Accept all reviewed changes and advance the baseline to current HEAD.
+     * Accept all reviewed changes. Clears reviewed files list but preserves the original baseline.
      */
     fun acceptChanges() {
         val data = loadData() ?: throw IllegalStateException("No active review")
-        val currentHead = gitService.getCurrentCommitSha() ?: throw IllegalStateException("Cannot get current commit")
 
         val updatedData = data.copy(
-            baseCommit = currentHead,
             reviewedFiles = mutableSetOf()
         )
 

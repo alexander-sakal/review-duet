@@ -4,7 +4,6 @@ import { ReviewStore } from '../store';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { execSync } from 'child_process';
 
 describe('acceptChanges', () => {
   let testDir: string;
@@ -14,17 +13,6 @@ describe('acceptChanges', () => {
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-test-'));
     reviewPath = path.join(testDir, '.review-duet', 'main.json');
-
-    // Initialize git repo
-    execSync('git init', { cwd: testDir });
-    execSync('git config user.email "test@test.com"', { cwd: testDir });
-    execSync('git config user.name "Test"', { cwd: testDir });
-
-    // Create initial commit
-    fs.writeFileSync(path.join(testDir, 'file.txt'), 'initial');
-    execSync('git add .', { cwd: testDir });
-    execSync('git commit -m "initial"', { cwd: testDir });
-
     store = new ReviewStore(reviewPath);
   });
 
@@ -32,40 +20,35 @@ describe('acceptChanges', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('moves baseCommit to current HEAD', () => {
-    const initialCommit = execSync('git rev-parse HEAD', { cwd: testDir, encoding: 'utf-8' }).trim();
-
-    // Create review with old base
+  it('clears reviewedFiles without moving baseCommit', () => {
     const reviewDir = path.join(testDir, '.review-duet');
     fs.mkdirSync(reviewDir, { recursive: true });
     fs.writeFileSync(path.join(reviewDir, 'main.json'), JSON.stringify({
       version: 1,
-      baseCommit: 'old-commit-sha',
+      baseCommit: 'original-base-sha',
       comments: [],
       reviewedFiles: ['file1.ts', 'file2.ts']
     }));
 
-    const result = acceptChanges(store, testDir);
+    const result = acceptChanges(store);
 
     const data = store.load();
-    expect(data.baseCommit).toBe(initialCommit);
+    expect(data.baseCommit).toBe('original-base-sha');
     expect(data.reviewedFiles).toEqual([]);
     expect(result).toContain('Accepted changes');
   });
 
-  it('returns message when already at HEAD', () => {
-    const currentHead = execSync('git rev-parse HEAD', { cwd: testDir, encoding: 'utf-8' }).trim();
-
+  it('returns message when no reviewed files to clear', () => {
     const reviewDir = path.join(testDir, '.review-duet');
     fs.mkdirSync(reviewDir, { recursive: true });
     fs.writeFileSync(path.join(reviewDir, 'main.json'), JSON.stringify({
       version: 1,
-      baseCommit: currentHead,
+      baseCommit: 'some-sha',
       comments: []
     }));
 
-    const result = acceptChanges(store, testDir);
+    const result = acceptChanges(store);
 
-    expect(result).toContain('No new changes to accept');
+    expect(result).toContain('No reviewed files to clear');
   });
 });

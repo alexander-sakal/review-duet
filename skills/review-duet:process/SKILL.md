@@ -13,7 +13,7 @@ Commands (always use `--review=<path>` to specify the review file):
 
 | Command | Purpose |
 |---------|---------|
-| `review-duet accept --review=<path>` | Accept previous changes, move baseline to HEAD |
+| `review-duet accept --review=<path>` | Accept previous changes, clear reviewed files list |
 | `review-duet list --review=<path> --status=open` | List open comments with all details |
 | `review-duet fix <id> --commit <sha> --review=<path> --message "text"` | Mark comment as fixed |
 
@@ -66,8 +66,8 @@ If no review files found anywhere, tell user: "No active review found. Start one
 For each repo with a review file:
 
 1. Run `review-duet list --review=<path> --status=open` to check for open comments
-2. **If 0 open comments, skip the repo entirely** — do NOT run `accept`, as it would move the baseline without any review having taken place
-3. If there ARE open comments, run `review-duet accept --review=<path>` to accept previous changes, then proceed
+2. **If 0 open comments, skip the repo entirely**
+3. If there ARE open comments, run `review-duet accept --review=<path>` to clear reviewed files from previous round, then proceed
 
 The `list` output includes everything: comment ID, file path, line number, original commit SHA (`@ <sha>`), and full comment text.
 
