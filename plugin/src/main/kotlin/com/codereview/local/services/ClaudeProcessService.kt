@@ -48,10 +48,11 @@ class ClaudeProcessService(private val project: Project) {
         val repoName = File(workingDir).name
         val tabName = "Review Duet — $repoName"
 
-        // Use -p (print mode) so claude exits on completion.
         val commandLine = GeneralCommandLine(
             "claude", "-p",
-            "/review-duet:process --review=$reviewFilePath"
+            "/review-duet:process --review=$reviewFilePath",
+            "--output-format", "stream-json",
+            "--verbose"
         )
             .withWorkDirectory(File(workingDir))
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
@@ -78,6 +79,9 @@ class ClaudeProcessService(private val project: Project) {
         RunContentManager.getInstance(project).showRunContent(executor, descriptor)
 
         handler.startNotify()
+
+        // Close stdin so claude -p doesn't wait for piped input
+        handler.processInput?.close()
     }
 
     private fun focusRunTab(workingDir: String) {
