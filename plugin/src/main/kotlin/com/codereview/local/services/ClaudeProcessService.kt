@@ -1,0 +1,80 @@
+package com.codereview.local.services
+
+import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.ColoredProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.filters.TextConsoleBuilderFactory
+import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.execution.ui.RunContentManager
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
+import java.io.File
+
+@Service(Service.Level.PROJECT)
+class ClaudeProcessService(private val project: Project) {
+
+    companion object {
+        private const val TAB_NAME = "Review Duet"
+
+        fun getInstance(project: Project): ClaudeProcessService {
+            return project.getService(ClaudeProcessService::class.java)
+        }
+    }
+
+    private var processHandler: ColoredProcessHandler? = null
+    private var descriptor: RunContentDescriptor? = null
+    private var onProcessFinished: (() -> Unit)? = null
+
+    val isRunning: Boolean
+        get() = processHandler?.isProcessTerminated == false
+
+    fun runProcess(workingDir: String, reviewFilePath: String, onFinished: (() -> Unit)? = null) {
+        if (isRunning) {
+            focusRunTab()
+            return
+        }
+
+        onProcessFinished = onFinished
+
+        // Use -p (print mode) so claude exits on completion.
+        val commandLine = GeneralCommandLine(
+            "claude", "-p",
+            "review-duet process --review=$reviewFilePath"
+        )
+            .withWorkDirectory(File(workingDir))
+            .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+
+        val handler = ColoredProcessHandler(commandLine)
+        processHandler = handler
+
+        handler.addProcessListener(object : ProcessAdapter() {
+            override fun processTerminated(event: ProcessEvent) {
+                processHandler = null
+                ApplicationManager.getApplication().invokeLater {
+                    onProcessFinished?.invoke()
+                    onProcessFinished = null
+                }
+            }
+        })
+
+        val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
+        console.attachToProcess(handler)
+
+        val runDescriptor = RunContentDescriptor(console, handler, console.component, TAB_NAME)
+        descriptor = runDescriptor
+
+        val executor = DefaultRunExecutor.getRunExecutorInstance()
+        RunContentManager.getInstance(project).showRunContent(executor, runDescriptor)
+
+        handler.startNotify()
+    }
+
+    private fun focusRunTab() {
+        val desc = descriptor ?: return
+        val executor = DefaultRunExecutor.getRunExecutorInstance()
+        RunContentManager.getInstance(project).showRunContent(executor, desc)
+    }
+}

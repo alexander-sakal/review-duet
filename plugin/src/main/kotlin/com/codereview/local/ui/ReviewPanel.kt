@@ -3,6 +3,7 @@ package com.codereview.local.ui
 import com.codereview.local.model.CommentStatus
 import com.codereview.local.model.CommitInfo
 import com.codereview.local.model.Review
+import com.codereview.local.services.ClaudeProcessService
 import com.codereview.local.services.GitService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
@@ -40,6 +41,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private var commitComboBox: JComboBox<CommitInfo>? = null
     private var selectedTabIndex: Int = 0
+    private var processButton: JButton? = null
 
     private var availableRepos: List<Path> = emptyList()
     private var selectedRepoPath: Path = basePath
@@ -350,11 +352,18 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         }
 
         // Action buttons with separator above
+        val claudeService = ClaudeProcessService.getInstance(project)
         val buttonPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
             add(JSeparator(), BorderLayout.NORTH)
             val buttonsContainer = JBPanel<JBPanel<*>>().apply {
                 layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0)
                 border = JBUI.Borders.empty(8, 0, 0, 0)
+                val claudeBtn = JButton(if (claudeService.isRunning) "Processing..." else "Process with Claude").apply {
+                    isEnabled = !claudeService.isRunning
+                    addActionListener { processWithClaude() }
+                }
+                processButton = claudeBtn
+                add(claudeBtn)
                 add(JButton("Refresh").apply {
                     addActionListener { refresh() }
                 })
@@ -383,6 +392,22 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             }
         )
         popup.show()
+    }
+
+    private fun processWithClaude() {
+        val service = ClaudeProcessService.getInstance(project)
+        if (service.isRunning) {
+            return
+        }
+
+        processButton?.text = "Processing..."
+        processButton?.isEnabled = false
+
+        service.runProcess(
+            workingDir = selectedRepoPath.toString(),
+            reviewFilePath = review.filePath.toString(),
+            onFinished = { refresh() }
+        )
     }
 
     private fun startReview() {
