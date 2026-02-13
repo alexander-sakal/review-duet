@@ -73,6 +73,11 @@ class GitService(val projectRoot: Path) {
         return result?.trim()
     }
 
+    fun getMergeBase(ref1: String, ref2: String): String? {
+        val result = runGitCommandWithOutput("merge-base", ref1, ref2)
+        return result?.trim()?.takeIf { it.isNotBlank() }
+    }
+
     fun getParentCommitSha(commitSha: String): String? {
         val result = runGitCommandWithOutput("rev-parse", "$commitSha^")
         return result?.trim()
@@ -106,12 +111,10 @@ class GitService(val projectRoot: Path) {
                 .directory(projectRoot.toFile())
                 .redirectErrorStream(true)
                 .start()
+            // Read output BEFORE waitFor to avoid pipe buffer deadlock on large files
+            val output = process.inputStream.bufferedReader().readText()
             process.waitFor(30, TimeUnit.SECONDS)
-            if (process.exitValue() == 0) {
-                process.inputStream.bufferedReader().readText()
-            } else {
-                null
-            }
+            if (process.exitValue() == 0) output else null
         } catch (e: Exception) {
             null
         }

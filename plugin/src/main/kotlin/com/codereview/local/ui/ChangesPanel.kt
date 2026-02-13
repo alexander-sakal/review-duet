@@ -143,6 +143,7 @@ class ChangesPanel(
     private val fileTree = Tree(treeModel)
     private var currentChanges: List<ChangedFile> = emptyList()
     private var baseCommit: String? = null
+    private var mergeBaseCommit: String? = null
     // Cached set for O(1) lookup during render - avoids disk I/O during scroll
     private var reviewedFilesCache: Set<String> = emptySet()
 
@@ -189,6 +190,30 @@ class ChangesPanel(
                     openDiffAtFile(file)
                 }
             }
+
+            override fun mousePressed(e: MouseEvent) { handlePopup(e) }
+            override fun mouseReleased(e: MouseEvent) { handlePopup(e) }
+
+            private fun handlePopup(e: MouseEvent) {
+                if (!e.isPopupTrigger) return
+                val path = fileTree.getPathForLocation(e.x, e.y) ?: return
+                fileTree.selectionPath = path
+                val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return
+
+                val group = DefaultActionGroup().apply {
+                    add(object : AnAction("Show Diff", "Show diff for selected files", AllIcons.Actions.Diff) {
+                        override fun actionPerformed(e: AnActionEvent) {
+                            if (node.userObject is ChangedFile) {
+                                openDiffAtFile(node.userObject as ChangedFile)
+                            } else {
+                                openDiffForNode(node)
+                            }
+                        }
+                    })
+                }
+                val popupMenu = ActionManager.getInstance().createActionPopupMenu("ChangesPanel.Popup", group)
+                popupMenu.component.show(fileTree, e.x, e.y)
+            }
         })
 
         val scrollPane = JBScrollPane(fileTree).apply {
@@ -221,7 +246,8 @@ class ChangesPanel(
             return
         }
 
-        currentChanges = gitService.getChangedFiles(baseCommit!!, "HEAD")
+        mergeBaseCommit = gitService.getMergeBase(baseCommit!!, "HEAD") ?: baseCommit
+        currentChanges = gitService.getChangedFiles(mergeBaseCommit!!, "HEAD")
         buildTree(currentChanges)
         treeModel.reload()
         expandAllNodes()
@@ -297,23 +323,44 @@ class ChangesPanel(
         if (currentChanges.isEmpty() || baseCommit == null) return
 
         val startIndex = currentChanges.indexOf(file).coerceAtLeast(0)
-        val chain = createDiffChain(startIndex)
+        val chain = createDiffChain(currentChanges, startIndex)
 
         DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+    }
+
+    private fun openDiffForNode(node: DefaultMutableTreeNode) {
+        if (baseCommit == null) return
+
+        val files = collectFiles(node)
+        if (files.isEmpty()) return
+
+        val chain = createDiffChain(files, 0)
+        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+    }
+
+    private fun collectFiles(node: DefaultMutableTreeNode): List<ChangedFile> {
+        val files = mutableListOf<ChangedFile>()
+        val enumeration = node.depthFirstEnumeration()
+        while (enumeration.hasMoreElements()) {
+            val child = enumeration.nextElement() as? DefaultMutableTreeNode ?: continue
+            val file = child.userObject as? ChangedFile ?: continue
+            files.add(file)
+        }
+        return files
     }
 
     private fun openAllDiffs() {
         if (currentChanges.isEmpty() || baseCommit == null) return
 
-        val chain = createDiffChain(0)
+        val chain = createDiffChain(currentChanges, 0)
         DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
     }
 
-    private fun createDiffChain(startIndex: Int): DiffRequestChain {
-        val fromRef = baseCommit ?: return EmptyDiffChain()
+    private fun createDiffChain(files: List<ChangedFile>, startIndex: Int): DiffRequestChain {
+        val fromRef = mergeBaseCommit ?: return EmptyDiffChain()
         val shortRef = fromRef.take(7)
 
-        val producers = currentChanges.map { file ->
+        val producers = files.map { file ->
             object : DiffRequestProducer {
                 override fun getName(): String = file.path
 

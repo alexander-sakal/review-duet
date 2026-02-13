@@ -110,7 +110,7 @@ class CommentListPanel(
             onCommentSelected(comment)
         })
 
-        if (comment.status == CommentStatus.FIXED && comment.resolveCommit != null) {
+        if (comment.resolveCommit != null) {
             actionsLine.add(Box.createHorizontalStrut(8))
             actionsLine.add(JBLabel("·").apply {
                 foreground = JBColor.GRAY
@@ -120,7 +120,7 @@ class CommentListPanel(
                 foreground = JBColor.GRAY
                 font = JBFont.small()
             })
-            actionsLine.add(createLink(comment.resolveCommit!!) {
+            actionsLine.add(createLink(comment.resolveCommit!!.take(7)) {
                 // Show only changes in the fix commit itself (commit^ to commit)
                 ChangesPanel.openDiffForSingleCommit(project, review, comment.resolveCommit!!, comment.file, comment.id)
             })
