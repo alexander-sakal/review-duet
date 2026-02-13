@@ -33,6 +33,7 @@ import java.awt.Rectangle
 import java.awt.Window
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.lang.ref.WeakReference
 import java.nio.file.Path
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
@@ -144,12 +145,25 @@ class ChangesPanel(
     private var currentChanges: List<ChangedFile> = emptyList()
     private var baseCommit: String? = null
     private var mergeBaseCommit: String? = null
+    private var lastDiffWindow: WeakReference<Window>? = null
     // Cached set for O(1) lookup during render - avoids disk I/O during scroll
     private var reviewedFilesCache: Set<String> = emptySet()
 
     init {
         // Toolbar with actions
         val actionGroup = DefaultActionGroup().apply {
+            add(object : AnAction("Show Last Diff", "Bring last diff window to front", AllIcons.Actions.Preview) {
+                override fun actionPerformed(e: AnActionEvent) {
+                    focusLastDiffWindow()
+                }
+
+                override fun update(e: AnActionEvent) {
+                    val window = lastDiffWindow?.get()
+                    e.presentation.isEnabled = window != null && window.isDisplayable
+                }
+
+                override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+            })
             add(object : AnAction("Review All Files", "Open diff view for all changed files", AllIcons.Actions.Diff) {
                 override fun actionPerformed(e: AnActionEvent) {
                     openAllDiffs()
@@ -323,9 +337,7 @@ class ChangesPanel(
         if (currentChanges.isEmpty() || baseCommit == null) return
 
         val startIndex = currentChanges.indexOf(file).coerceAtLeast(0)
-        val chain = createDiffChain(currentChanges, startIndex)
-
-        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+        showDiffAndTrack(createDiffChain(currentChanges, startIndex))
     }
 
     private fun openDiffForNode(node: DefaultMutableTreeNode) {
@@ -334,8 +346,7 @@ class ChangesPanel(
         val files = collectFiles(node)
         if (files.isEmpty()) return
 
-        val chain = createDiffChain(files, 0)
-        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+        showDiffAndTrack(createDiffChain(files, 0))
     }
 
     private fun collectFiles(node: DefaultMutableTreeNode): List<ChangedFile> {
@@ -352,8 +363,25 @@ class ChangesPanel(
     private fun openAllDiffs() {
         if (currentChanges.isEmpty() || baseCommit == null) return
 
-        val chain = createDiffChain(currentChanges, 0)
+        showDiffAndTrack(createDiffChain(currentChanges, 0))
+    }
+
+    private fun showDiffAndTrack(chain: DiffRequestChain) {
+        val windowsBefore = Window.getWindows().toSet()
         DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.FRAME)
+        SwingUtilities.invokeLater {
+            val newWindow = Window.getWindows().firstOrNull { it.isVisible && it !in windowsBefore }
+            if (newWindow != null) {
+                lastDiffWindow = WeakReference(newWindow)
+            }
+        }
+    }
+
+    private fun focusLastDiffWindow() {
+        val window = lastDiffWindow?.get() ?: return
+        if (!window.isDisplayable) return
+        window.toFront()
+        window.requestFocus()
     }
 
     private fun createDiffChain(files: List<ChangedFile>, startIndex: Int): DiffRequestChain {
