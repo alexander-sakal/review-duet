@@ -17,27 +17,36 @@ import java.io.File
 class ClaudeProcessService(private val project: Project) {
 
     companion object {
-        private const val TAB_NAME = "Review Duet"
-
         fun getInstance(project: Project): ClaudeProcessService {
             return project.getService(ClaudeProcessService::class.java)
         }
     }
 
-    private var processHandler: ColoredProcessHandler? = null
-    private var descriptor: RunContentDescriptor? = null
-    private var onProcessFinished: (() -> Unit)? = null
+    private data class RunEntry(
+        val processHandler: ColoredProcessHandler,
+        val descriptor: RunContentDescriptor,
+        val onFinished: (() -> Unit)?
+    )
 
-    val isRunning: Boolean
-        get() = processHandler?.isProcessTerminated == false
+    private val runs = mutableMapOf<String, RunEntry>()
+
+    fun isRunning(workingDir: String): Boolean {
+        val entry = runs[workingDir] ?: return false
+        if (entry.processHandler.isProcessTerminated) {
+            runs.remove(workingDir)
+            return false
+        }
+        return true
+    }
 
     fun runProcess(workingDir: String, reviewFilePath: String, onFinished: (() -> Unit)? = null) {
-        if (isRunning) {
-            focusRunTab()
+        if (isRunning(workingDir)) {
+            focusRunTab(workingDir)
             return
         }
 
-        onProcessFinished = onFinished
+        val repoName = File(workingDir).name
+        val tabName = "Review Duet — $repoName"
 
         // Use -p (print mode) so claude exits on completion.
         val commandLine = GeneralCommandLine(
@@ -48,14 +57,12 @@ class ClaudeProcessService(private val project: Project) {
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
 
         val handler = ColoredProcessHandler(commandLine)
-        processHandler = handler
 
         handler.addProcessListener(object : ProcessAdapter() {
             override fun processTerminated(event: ProcessEvent) {
-                processHandler = null
+                runs.remove(workingDir)
                 ApplicationManager.getApplication().invokeLater {
-                    onProcessFinished?.invoke()
-                    onProcessFinished = null
+                    onFinished?.invoke()
                 }
             }
         })
@@ -63,18 +70,19 @@ class ClaudeProcessService(private val project: Project) {
         val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
         console.attachToProcess(handler)
 
-        val runDescriptor = RunContentDescriptor(console, handler, console.component, TAB_NAME)
-        descriptor = runDescriptor
+        val descriptor = RunContentDescriptor(console, handler, console.component, tabName)
+
+        runs[workingDir] = RunEntry(handler, descriptor, onFinished)
 
         val executor = DefaultRunExecutor.getRunExecutorInstance()
-        RunContentManager.getInstance(project).showRunContent(executor, runDescriptor)
+        RunContentManager.getInstance(project).showRunContent(executor, descriptor)
 
         handler.startNotify()
     }
 
-    private fun focusRunTab() {
-        val desc = descriptor ?: return
+    private fun focusRunTab(workingDir: String) {
+        val entry = runs[workingDir] ?: return
         val executor = DefaultRunExecutor.getRunExecutorInstance()
-        RunContentManager.getInstance(project).showRunContent(executor, desc)
+        RunContentManager.getInstance(project).showRunContent(executor, entry.descriptor)
     }
 }

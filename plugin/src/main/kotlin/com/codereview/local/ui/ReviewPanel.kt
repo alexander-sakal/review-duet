@@ -358,8 +358,9 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             val buttonsContainer = JBPanel<JBPanel<*>>().apply {
                 layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0)
                 border = JBUI.Borders.empty(8, 0, 0, 0)
-                val claudeBtn = JButton(if (claudeService.isRunning) "Processing..." else "Process with Claude").apply {
-                    isEnabled = !claudeService.isRunning
+                val running = claudeService.isRunning(selectedRepoPath.toString())
+                val claudeBtn = JButton(if (running) "Processing..." else "Process with Claude").apply {
+                    isEnabled = !running
                     addActionListener { processWithClaude() }
                 }
                 processButton = claudeBtn
@@ -396,7 +397,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private fun processWithClaude() {
         val service = ClaudeProcessService.getInstance(project)
-        if (service.isRunning) {
+        if (service.isRunning(selectedRepoPath.toString())) {
             return
         }
 
