@@ -95,7 +95,9 @@ class ClaudeProcessService(private val project: Project) {
             }
         })
 
-        val descriptor = RunContentDescriptor(console, handler, console.component, tabName)
+        val descriptor = RunContentDescriptor(console, handler, console.component, tabName).apply {
+            isActivateToolWindowWhenAdded = false
+        }
 
         runs[workingDir] = RunEntry(handler, descriptor, onFinished)
 
