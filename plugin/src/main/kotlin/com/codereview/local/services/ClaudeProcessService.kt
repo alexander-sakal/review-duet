@@ -51,7 +51,7 @@ class ClaudeProcessService(private val project: Project) {
         // Use -p (print mode) so claude exits on completion.
         val commandLine = GeneralCommandLine(
             "claude", "-p",
-            "review-duet process --review=$reviewFilePath"
+            "/review-duet:process --review=$reviewFilePath"
         )
             .withWorkDirectory(File(workingDir))
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)

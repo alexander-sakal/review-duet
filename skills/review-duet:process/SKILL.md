@@ -40,6 +40,10 @@ Parse each comment to extract: **id**, **file**, **line**, **original commit**, 
 
 ## Phase 1: Find Review Files
 
+**If `--review=<path>` was provided as an argument**, skip discovery — use that path directly. The repo root is the parent of the `.review-duet` directory (i.e., `<path>/../../`).
+
+**Otherwise**, discover review files:
+
 Check if `.idea/vcs.xml` exists in the current directory:
 
 ```bash
