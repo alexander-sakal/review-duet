@@ -65,12 +65,13 @@ If no review files found anywhere, tell user: "No active review found. Start one
 
 For each repo with a review file:
 
-1. Run `review-duet accept --review=<path>` to accept previous changes
-2. Run `review-duet list --review=<path> --status=open` to get all open comments
+1. Run `review-duet list --review=<path> --status=open` to check for open comments
+2. **If 0 open comments, skip the repo entirely** — do NOT run `accept`, as it would move the baseline without any review having taken place
+3. If there ARE open comments, run `review-duet accept --review=<path>` to accept previous changes, then proceed
 
 The `list` output includes everything: comment ID, file path, line number, original commit SHA (`@ <sha>`), and full comment text.
 
-**If 0 open comments in a repo, skip it.** If 0 comments across all repos, tell user: "No open comments found." and stop.
+If 0 comments across all repos, tell user: "No open comments found." and stop.
 
 ---
 
