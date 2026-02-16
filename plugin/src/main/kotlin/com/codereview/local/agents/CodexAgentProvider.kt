@@ -7,12 +7,10 @@ class CodexAgentProvider : AgentProvider {
     override val id = "codex"
     override val displayName = "Codex CLI"
 
-    override fun buildCommand(workingDir: String, reviewFilePath: String): GeneralCommandLine {
+    override fun buildCommand(workingDir: String, reviewFilePath: String, skillContent: String): GeneralCommandLine {
         return GeneralCommandLine(
             "codex", "--quiet",
-            "Process review comments from $reviewFilePath. " +
-                "Use the review-duet CLI to list comments (review-duet list --review=$reviewFilePath --status=open), " +
-                "fix them, and mark as done (review-duet fix <id> --commit <sha> --review=$reviewFilePath --message \"...\")."
+            "$skillContent\n\nReview file path: $reviewFilePath"
         )
             .withWorkDirectory(File(workingDir))
             .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)

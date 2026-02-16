@@ -8,7 +8,7 @@ class ClaudeAgentProvider : AgentProvider {
     override val id = "claude"
     override val displayName = "Claude Code"
 
-    override fun buildCommand(workingDir: String, reviewFilePath: String): GeneralCommandLine {
+    override fun buildCommand(workingDir: String, reviewFilePath: String, skillContent: String): GeneralCommandLine {
         return GeneralCommandLine(
             "claude", "-p",
             "/review-duet:process --review=$reviewFilePath",

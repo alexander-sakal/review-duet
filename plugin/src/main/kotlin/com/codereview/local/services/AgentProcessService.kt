@@ -64,7 +64,8 @@ class AgentProcessService(private val project: Project) {
         val repoName = java.io.File(workingDir).name
         val tabName = "Review Duet — $repoName"
 
-        val commandLine = provider.buildCommand(workingDir, reviewFilePath)
+        val skillContent = loadSkillContent(workingDir)
+        val commandLine = provider.buildCommand(workingDir, reviewFilePath, skillContent)
         val handler = ColoredProcessHandler(commandLine)
         val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
         console.attachToProcess(handler)
@@ -108,6 +109,20 @@ class AgentProcessService(private val project: Project) {
         if (provider.shouldCloseStdin()) {
             handler.processInput?.close()
         }
+    }
+
+    private fun loadSkillContent(workingDir: String): String {
+        // Look for skill in standard locations
+        val candidates = listOf(
+            java.io.File(workingDir, "skills/review-duet:process/SKILL.md"),
+            java.io.File(System.getProperty("user.home"), ".claude/skills/review-duet:process/SKILL.md")
+        )
+        for (candidate in candidates) {
+            if (candidate.exists()) {
+                return candidate.readText()
+            }
+        }
+        return ""
     }
 
     fun focusRunTab(workingDir: String) {
