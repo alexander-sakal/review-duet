@@ -1,16 +1,19 @@
 # Review Duet
 
-Local code review workflow tool for AI-assisted development with Claude Code.
+Local code review workflow tool for AI-assisted development.
 
 ## Architecture
 
 - **Plugin** (`plugin/`) - JetBrains/IntelliJ plugin in Kotlin
-- **CLI** (`cli/`) - TypeScript CLI for Claude Code communication
+  - `agents/` - Agent provider interface and implementations (Claude, Codex, etc.)
+  - `services/` - Agent process management, git operations
+  - `ui/` - Review panel, comment list, diff integration
+- **CLI** (`cli/`) - TypeScript CLI for review file operations
 - **Skill** (`skills/`) - Claude Code skill for processing comments
 
 ## Data Flow
 
-Plugin writes comments to `.review-duet/{branch}.json` → CLI reads/updates → Claude processes via skill
+Plugin writes comments to `.review-duet/{branch}.json` → CLI reads/updates → Selected agent processes via its own mechanism
 
 ## Development
 
@@ -32,18 +35,25 @@ cd plugin && ./gradlew runIde
 - `review-duet fix <id> <explanation>` - Mark comment as fixed
 - `review-duet accept` - Accept current review state
 
-## Plugin: Process with Claude
+## Plugin: Agent Processing
 
-The sidebar "Process with Claude" button launches `claude -p` as a subprocess to process review comments.
+The sidebar "Process" button launches a configured AI agent as a subprocess to process review comments.
 
 Key implementation details:
-- **Service**: `ClaudeProcessService` — project-level `@Service`, tracks running processes per repo in a `Map<String, RunEntry>`
-- **Command**: `claude -p "/review-duet:process --review=<path>" --output-format stream-json --verbose`
-- **stdin must be closed** after `handler.startNotify()` — otherwise `claude -p` hangs waiting for piped input
-- **Result parsing**: collects stdout, finds `{"type":"result","result":"..."}` JSON line, appends parsed text to console as `--- Result ---`
+- **Agent Interface**: `AgentProvider` — defines `buildCommand()`, `parseResult()`, `shouldCloseStdin()` per agent
+- **Registry**: `AgentRegistry` — singleton holding all registered providers (Claude Code, Codex CLI, etc.)
+- **Service**: `AgentProcessService` — project-level `@Service`, tracks running processes per repo in a `Map<String, RunEntry>`
+- **Agent selection**: toolbar dropdown persisted via `PropertiesComponent`
+- **Result parsing**: each agent provider parses its own output format
 - **Notification**: balloon with "Show Output" action that opens Run tool window via `ToolWindowManager`
 - **Lazy cleanup**: `runs` entries are not removed on process exit (needed for `focusRunTab`); `isRunning()` cleans up terminated entries on next check
 - **Multi-repo**: each repo gets its own Run tab named "Review Duet — {repoName}"
+
+### Adding a new agent
+
+1. Create a class implementing `AgentProvider` in `plugin/src/main/kotlin/com/codereview/local/agents/`
+2. Register it in `AgentProcessService.companion.init`
+3. It appears automatically in the toolbar dropdown
 
 ## Testing
 
