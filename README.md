@@ -1,6 +1,6 @@
 # Review Duet
 
-A JetBrains plugin + CLI for local code review workflows when developing with Claude Code.
+A JetBrains plugin + CLI for local code review workflows with AI-assisted development.
 
 ## Overview
 
@@ -10,15 +10,17 @@ Enable structured review rounds with comment tracking and status management for 
 
 - **Plugin** (`plugin/`) - IntelliJ/PhpStorm plugin for review UI
 - **CLI** (`cli/`) - Command-line interface for agent communication
-- **Skill** (`skills/`) - Claude Code skill for processing comments
+- **Skill** (`skills/`) - Claude Code skill for processing comments (optional, for Claude Code users)
 
 ## How It Works
 
 **Plugin** writes comments to `.review-duet/{branch}.json` and displays review state.
 
-**CLI** (`review-duet`) provides commands for Claude Code to read comments, mark them fixed, and update the baseline commit.
+**CLI** (`review-duet`) provides commands for AI agents to read comments, mark them fixed, and update the baseline commit.
 
-**Skill** (`/review-duet:process`) instructs Claude Code to autonomously process open comments - reading each one, making fixes, committing changes, and marking comments as fixed.
+**Agent Processing** - The plugin supports multiple AI agents (Claude Code, Codex CLI, etc.) via a dropdown in the toolbar. Each agent processes comments using the CLI.
+
+**Skill** (`/review-duet:process`) is a Claude Code skill that instructs Claude to autonomously process open comments. Other agents receive equivalent instructions via their command-line interface.
 
 ## Quick Start
 
@@ -51,21 +53,23 @@ ln -s $(pwd)/skills/review-duet:process ~/.claude/skills/review-duet:process
 5. Add comments via gutter icons or right-click in editor
 6. View changes and comments in the panel
 
-### In Claude Code
+### Processing Comments
 
-Run `/review-duet:process` to automatically process all open comments. Claude will:
+Select your AI agent from the dropdown in the Review Duet toolbar and click "Process". The agent will:
 1. Read each open comment
 2. Understand the requested change
 3. Make the fix (checking for similar issues elsewhere)
 4. Commit the change
 5. Mark the comment as fixed with an explanation
 
+**Claude Code users** can also run `/review-duet:process` directly in the terminal.
+
 ## Workflow
 
 1. **Start Review** - Select base commit in plugin
 2. **Develop** - Claude implements features
 3. **Review** - Add comments in IDE on changed lines
-4. **Process** - Run `/review-duet:process` in Claude Code
+4. **Process** - Click "Process" in the plugin (or run `/review-duet:process` in Claude Code)
 5. **Verify** - Review fixes in IDE, resolve or reopen comments
 6. **Repeat** - Continue until satisfied
 
