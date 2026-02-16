@@ -1,8 +1,10 @@
 package com.codereview.local.services
 
-import com.google.gson.JsonParser
+import com.codereview.local.agents.AgentProvider
+import com.codereview.local.agents.AgentRegistry
+import com.codereview.local.agents.ClaudeAgentProvider
+import com.codereview.local.agents.CodexAgentProvider
 import com.intellij.execution.executors.DefaultRunExecutor
-import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ColoredProcessHandler
 import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
@@ -16,14 +18,18 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.wm.ToolWindowManager
-import java.io.File
 
 @Service(Service.Level.PROJECT)
-class ClaudeProcessService(private val project: Project) {
+class AgentProcessService(private val project: Project) {
 
     companion object {
-        fun getInstance(project: Project): ClaudeProcessService {
-            return project.getService(ClaudeProcessService::class.java)
+        fun getInstance(project: Project): AgentProcessService {
+            return project.getService(AgentProcessService::class.java)
+        }
+
+        init {
+            AgentRegistry.register(ClaudeAgentProvider())
+            AgentRegistry.register(CodexAgentProvider())
         }
     }
 
@@ -44,29 +50,25 @@ class ClaudeProcessService(private val project: Project) {
         return true
     }
 
-    fun runProcess(workingDir: String, reviewFilePath: String, onFinished: (() -> Unit)? = null) {
+    fun runProcess(
+        workingDir: String,
+        reviewFilePath: String,
+        provider: AgentProvider,
+        onFinished: (() -> Unit)? = null
+    ) {
         if (isRunning(workingDir)) {
             focusRunTab(workingDir)
             return
         }
 
-        val repoName = File(workingDir).name
+        val repoName = java.io.File(workingDir).name
         val tabName = "Review Duet — $repoName"
 
-        val commandLine = GeneralCommandLine(
-            "claude", "-p",
-            "/review-duet:process --review=$reviewFilePath",
-            "--output-format", "stream-json",
-            "--verbose"
-        )
-            .withWorkDirectory(File(workingDir))
-            .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
-
+        val commandLine = provider.buildCommand(workingDir, reviewFilePath)
         val handler = ColoredProcessHandler(commandLine)
         val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
         console.attachToProcess(handler)
 
-        // Collect stdout to parse the result event at the end
         val outputLines = mutableListOf<String>()
 
         handler.addProcessListener(object : ProcessAdapter() {
@@ -77,8 +79,7 @@ class ClaudeProcessService(private val project: Project) {
             }
 
             override fun processTerminated(event: ProcessEvent) {
-                // Parse the result and append human-readable summary to console
-                val result = parseResult(outputLines)
+                val result = provider.parseResult(outputLines)
                 if (result != null) {
                     ApplicationManager.getApplication().invokeLater {
                         console.print("\n\n--- Result ---\n", ConsoleViewContentType.SYSTEM_OUTPUT)
@@ -87,8 +88,6 @@ class ClaudeProcessService(private val project: Project) {
                     }
                 }
 
-                // Don't remove from runs here — focusRunTab needs the descriptor.
-                // isRunning() handles cleanup lazily.
                 ApplicationManager.getApplication().invokeLater {
                     onFinished?.invoke()
                 }
@@ -106,34 +105,15 @@ class ClaudeProcessService(private val project: Project) {
 
         handler.startNotify()
 
-        // Close stdin so claude -p doesn't wait for piped input
-        handler.processInput?.close()
-    }
-
-    private fun parseResult(outputLines: List<String>): String? {
-        val fullOutput = outputLines.joinToString("")
-
-        for (line in fullOutput.lines()) {
-            val trimmed = line.trim()
-            if (trimmed.isEmpty()) continue
-            try {
-                val json = JsonParser.parseString(trimmed).asJsonObject
-                if (json.get("type")?.asString == "result") {
-                    return json.get("result")?.asString
-                }
-            } catch (_: Exception) {
-                // Skip malformed lines
-            }
+        if (provider.shouldCloseStdin()) {
+            handler.processInput?.close()
         }
-
-        return null
     }
 
     fun focusRunTab(workingDir: String) {
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Run")
         toolWindow?.show()
 
-        // Try to select the specific tab
         val entry = runs[workingDir] ?: return
         val executor = DefaultRunExecutor.getRunExecutorInstance()
         RunContentManager.getInstance(project).selectRunContent(entry.descriptor)
