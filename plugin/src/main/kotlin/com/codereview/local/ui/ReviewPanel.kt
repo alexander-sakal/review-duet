@@ -3,7 +3,10 @@ package com.codereview.local.ui
 import com.codereview.local.model.CommentStatus
 import com.codereview.local.model.CommitInfo
 import com.codereview.local.model.Review
-import com.codereview.local.services.ClaudeProcessService
+import com.codereview.local.agents.AgentProvider
+import com.codereview.local.agents.AgentRegistry
+import com.codereview.local.services.AgentProcessService
+import com.intellij.ide.util.PropertiesComponent
 import com.codereview.local.services.GitService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
@@ -42,6 +45,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private var commitComboBox: JComboBox<CommitInfo>? = null
     private var selectedTabIndex: Int = 0
     private var processButton: JButton? = null
+    private var agentComboBox: JComboBox<AgentProvider>? = null
 
     private var availableRepos: List<Path> = emptyList()
     private var selectedRepoPath: Path = basePath
@@ -104,6 +108,18 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         review = Review.forCurrentBranch(repoPath)
         changesPanel = ChangesPanel(project, review)
         refresh()
+    }
+
+    private fun getSelectedAgent(): AgentProvider {
+        return agentComboBox?.selectedItem as? AgentProvider ?: AgentRegistry.getDefault()
+    }
+
+    private fun saveSelectedAgent(provider: AgentProvider) {
+        PropertiesComponent.getInstance(project).setValue("reviewDuet.selectedAgentId", provider.id)
+    }
+
+    private fun loadSelectedAgentId(): String? {
+        return PropertiesComponent.getInstance(project).getValue("reviewDuet.selectedAgentId")
     }
 
     fun refresh() {
@@ -352,19 +368,50 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         }
 
         // Action buttons with separator above
-        val claudeService = ClaudeProcessService.getInstance(project)
+        val agentService = AgentProcessService.getInstance(project)
         val buttonPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
             add(JSeparator(), BorderLayout.NORTH)
             val buttonsContainer = JBPanel<JBPanel<*>>().apply {
                 layout = java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0)
                 border = JBUI.Borders.empty(8, 0, 0, 0)
-                val running = claudeService.isRunning(selectedRepoPath.toString())
-                val claudeBtn = JButton(if (running) "Processing..." else "Process with Claude").apply {
-                    isEnabled = !running
-                    addActionListener { processWithClaude() }
+
+                // Agent dropdown
+                val agents = AgentRegistry.getAll()
+                val agentCombo = JComboBox(agents.toTypedArray()).apply {
+                    renderer = object : ListCellRenderer<AgentProvider> {
+                        private val defaultRenderer = javax.swing.DefaultListCellRenderer()
+                        override fun getListCellRendererComponent(
+                            list: JList<out AgentProvider>?,
+                            value: AgentProvider?,
+                            index: Int,
+                            isSelected: Boolean,
+                            cellHasFocus: Boolean
+                        ): Component {
+                            return defaultRenderer.getListCellRendererComponent(
+                                list, value?.displayName ?: "", index, isSelected, cellHasFocus
+                            )
+                        }
+                    }
+                    val savedId = loadSelectedAgentId()
+                    if (savedId != null) {
+                        val saved = agents.find { it.id == savedId }
+                        if (saved != null) selectedItem = saved
+                    }
+                    addActionListener {
+                        val selected = selectedItem as? AgentProvider ?: return@addActionListener
+                        saveSelectedAgent(selected)
+                    }
                 }
-                processButton = claudeBtn
-                add(claudeBtn)
+                agentComboBox = agentCombo
+                add(agentCombo)
+
+                val running = agentService.isRunning(selectedRepoPath.toString())
+                val processBtn = JButton(if (running) "Processing..." else "Process").apply {
+                    isEnabled = !running
+                    addActionListener { processWithAgent() }
+                }
+                processButton = processBtn
+                add(processBtn)
                 add(JButton("Refresh").apply {
                     addActionListener { refresh() }
                 })
@@ -395,8 +442,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         popup.show()
     }
 
-    private fun processWithClaude() {
-        val service = ClaudeProcessService.getInstance(project)
+    private fun processWithAgent() {
+        val service = AgentProcessService.getInstance(project)
         if (service.isRunning(selectedRepoPath.toString())) {
             return
         }
@@ -405,9 +452,11 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         processButton?.isEnabled = false
 
         val repoPath = selectedRepoPath.toString()
+        val agent = getSelectedAgent()
         service.runProcess(
             workingDir = repoPath,
             reviewFilePath = review.filePath.toString(),
+            provider = agent,
             onFinished = {
                 refresh()
                 com.intellij.notification.NotificationGroupManager.getInstance()
