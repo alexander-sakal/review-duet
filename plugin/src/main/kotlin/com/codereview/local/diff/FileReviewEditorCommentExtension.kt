@@ -151,6 +151,29 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         }
 
         /**
+         * Tears down editor state (gutter listeners, current highlighter, and inlays) for any
+         * currently-open main editors showing [targetFile]. Called when a review is closed while
+         * the editor stays open — the counterpart to [editorReleased] for that scenario.
+         * Runs on the EDT.
+         */
+        internal fun uninstallForFile(project: Project, targetFile: Path) {
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                val targetPath = targetFile.toString()
+                com.intellij.openapi.editor.EditorFactory.getInstance().allEditors.forEach { editor ->
+                    val vfile = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getFile(editor.document) ?: return@forEach
+                    if (vfile.path != targetPath || editor.editorKind != com.intellij.openapi.editor.EditorKind.MAIN_EDITOR) return@forEach
+                    val state = editor.getUserData(STATE_KEY) ?: return@forEach
+                    editor.removeEditorMouseMotionListener(state.motionListener)
+                    editor.removeEditorMouseListener(state.mouseListener)
+                    state.currentHighlighter?.dispose()
+                    state.commentInlays.forEach { it.dispose() }
+                    state.commentInlays.clear()
+                    editor.putUserData(STATE_KEY, null)
+                }
+            }
+        }
+
+        /**
          * Builds a panel displaying a single [FileComment] as an inlay with Edit and Delete controls.
          * Edit flips to an inline form pre-filled with the current text; Delete shows a confirmation
          * dialog before removing the comment via [FileReviewPanel].

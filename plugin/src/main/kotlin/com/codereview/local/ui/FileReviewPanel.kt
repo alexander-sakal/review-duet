@@ -118,6 +118,8 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
 
         val filePopupGroup = DefaultActionGroup().apply {
             add(CopyReviewFilePathAction())
+            addSeparator()
+            add(CloseReviewAction())
         }
         PopupHandler.installFollowingSelectionTreePopup(reviewTree, filePopupGroup, "ReviewDuetFilePopup")
 
@@ -144,11 +146,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         val process = JButton("Process with agent").also { btn ->
             btn.addActionListener { onProcess() }
         }
-        val accept = JButton("Accept & close").also { btn ->
-            btn.addActionListener { onAcceptAndClose() }
-        }
         add(process)
-        add(accept)
     }
 
     fun addComment(targetFile: Path, line: Int, text: String) {
@@ -313,26 +311,31 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         )
     }
 
-    private fun onAcceptAndClose() {
+    internal fun closeReview(targetFile: Path) {
         detachMarkers()
-        val (review, data) = current ?: return
-        val target = Path.of(data.filePath)
-        FileReviewService.getInstance(project).close(target)
+        val current = this.current
+        val (review, data) = if (current != null && Path.of(current.second.filePath) == targetFile) {
+            current
+        } else {
+            val r = FileReviewService.getInstance(project).openOrCreate(targetFile)
+            r to r.loadOrInit()
+        }
+        FileReviewService.getInstance(project).close(targetFile)
+        // Editor-side cleanup (gutter + inlays):
+        com.codereview.local.diff.FileReviewEditorCommentExtension.uninstallForFile(project, targetFile)
+        // Remove tree node:
         for (i in 0 until treeRoot.childCount) {
-            val n = treeRoot.getChildAt(i) as DefaultMutableTreeNode
-            if ((n.userObject as? FileNode)?.targetFile == target) {
+            val n = treeRoot.getChildAt(i) as javax.swing.tree.DefaultMutableTreeNode
+            if ((n.userObject as? FileNode)?.targetFile == targetFile) {
                 treeModel.removeNodeFromParent(n)
                 break
             }
         }
-        if (treeRoot.childCount == 0) {
-            current = null
-        } else {
-            val first = treeRoot.getChildAt(0) as DefaultMutableTreeNode
+        if (this.current?.second?.filePath == data.filePath) this.current = null
+        if (treeRoot.childCount > 0) {
+            val first = treeRoot.getChildAt(0) as javax.swing.tree.DefaultMutableTreeNode
             val firstFile = (first.userObject as FileNode).targetFile
-            current = null
             focusReview(firstFile)
-            selectFileNode(firstFile)
         }
     }
 
@@ -408,6 +411,19 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             val path = fileNode.review.storageFile.toAbsolutePath().toString()
             val selection = java.awt.datatransfer.StringSelection(path)
             java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+        }
+    }
+
+    private inner class CloseReviewAction : com.intellij.openapi.actionSystem.AnAction("Close review", "Discard this file review", null) {
+        override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+        override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            val node = (reviewTree.selectionPath?.lastPathComponent as? javax.swing.tree.DefaultMutableTreeNode)
+            e.presentation.isEnabledAndVisible = node?.userObject is FileNode
+        }
+        override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            val node = reviewTree.selectionPath?.lastPathComponent as? javax.swing.tree.DefaultMutableTreeNode ?: return
+            val fileNode = node.userObject as? FileNode ?: return
+            closeReview(fileNode.targetFile)
         }
     }
 }
