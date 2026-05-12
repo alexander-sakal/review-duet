@@ -140,6 +140,9 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private fun showReview(targetFile: Path) {
         detachMarkers()
         if (!targetFile.toFile().exists()) {
+            val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
+            val data = try { review.loadOrInit() } catch (_: Exception) { null }
+            if (data != null) current = review to data
             renderError("File no longer exists: ${targetFile.fileName}. Use Accept & close to discard.")
             return
         }
