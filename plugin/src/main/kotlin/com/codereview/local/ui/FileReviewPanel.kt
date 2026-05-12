@@ -9,7 +9,13 @@ import com.codereview.local.services.AgentProcessService
 import com.codereview.local.services.FileReviewService
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.editor.RangeMarker
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
@@ -33,6 +39,9 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private val headerLabel = JBLabel("No file review selected")
     private var current: Pair<FileReview, FileReviewData>? = null
     private var busConnection: MessageBusConnection? = null
+    private val markersByCommentId = mutableMapOf<Int, RangeMarker>()
+    private var trackedDocument: Document? = null
+    private var documentListener: DocumentListener? = null
 
     init {
         layout = BorderLayout()
@@ -92,6 +101,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     private fun showReview(targetFile: Path) {
+        detachMarkers()
         if (!targetFile.toFile().exists()) {
             renderError("File no longer exists: ${targetFile.fileName}. Use Accept & close to discard.")
             return
@@ -107,6 +117,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         headerLabel.text = "${targetFile.fileName}  (${data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
         commentsListModel.clear()
         data.comments.forEach { commentsListModel.addElement(it) }
+        attachMarkers(data)
     }
 
     private fun renderError(message: String) {
@@ -144,6 +155,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     private fun onAcceptAndClose() {
+        detachMarkers()
         val (review, data) = current ?: return
         FileReviewService.getInstance(project).close(Path.of(data.filePath))
         val target = Path.of(data.filePath)
@@ -151,5 +163,57 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         commentsListModel.clear()
         headerLabel.text = "No file review selected"
         current = null
+    }
+
+    private fun attachMarkers(data: FileReviewData) {
+        detachMarkers()
+        val vfile = LocalFileSystem.getInstance().findFileByPath(data.filePath) ?: return
+        val doc = FileDocumentManager.getInstance().getDocument(vfile) ?: return
+        trackedDocument = doc
+
+        data.comments.forEach { c ->
+            val lineIdx = (c.line - 1).coerceIn(0, (doc.lineCount - 1).coerceAtLeast(0))
+            val start = doc.getLineStartOffset(lineIdx)
+            val end = doc.getLineEndOffset(lineIdx)
+            markersByCommentId[c.id] = doc.createRangeMarker(start, end)
+        }
+
+        val listener = object : DocumentListener {
+            override fun documentChanged(event: DocumentEvent) {
+                persistMarkers(data, doc)
+            }
+        }
+        doc.addDocumentListener(listener)
+        documentListener = listener
+    }
+
+    private fun detachMarkers() {
+        val doc = trackedDocument
+        val listener = documentListener
+        if (doc != null && listener != null) doc.removeDocumentListener(listener)
+        markersByCommentId.values.forEach { it.dispose() }
+        markersByCommentId.clear()
+        trackedDocument = null
+        documentListener = null
+    }
+
+    private fun persistMarkers(data: FileReviewData, doc: Document) {
+        var changed = false
+        data.comments.forEachIndexed { idx, c ->
+            val m = markersByCommentId[c.id] ?: return@forEachIndexed
+            if (!m.isValid) return@forEachIndexed
+            val newLine = doc.getLineNumber(m.startOffset) + 1
+            if (newLine != c.line) {
+                data.comments[idx] = c.copy(line = newLine)
+                changed = true
+            }
+        }
+        if (changed) {
+            current?.first?.save(data)
+            ApplicationManager.getApplication().invokeLater {
+                commentsListModel.clear()
+                data.comments.forEach { commentsListModel.addElement(it) }
+            }
+        }
     }
 }
