@@ -27,7 +27,7 @@ data class FileReviewData(
     val version: Int,
     val mode: String,
     val filePath: String,
-    var fileHashAtStart: String,
+    val fileHashAtStart: String,
     var lastSeenHash: String,
     val createdAt: String,
     val comments: MutableList<FileComment>
