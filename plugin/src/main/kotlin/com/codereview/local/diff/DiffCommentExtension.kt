@@ -1023,7 +1023,15 @@ class DiffCommentExtension : DiffExtension() {
                         .getToolWindow("Review Duet Files")
                         ?.contentManager?.contents?.firstOrNull()
                         ?.component as? FileReviewPanel
-                    panel?.addComment(absoluteTarget, line, text)
+                    if (panel != null) {
+                        panel.addComment(absoluteTarget, line, text)
+                    } else {
+                        com.intellij.openapi.ui.Messages.showInfoMessage(
+                            project,
+                            "Open the file via \"Review File with Review Duet\" first to add comments.",
+                            "Review Duet"
+                        )
+                    }
                 } else {
                     // Branch review mode: existing behavior
                     review.addComment(filePath, line, text)
