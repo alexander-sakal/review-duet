@@ -41,6 +41,16 @@ class CommentAnchorResolverTest {
         val c = comment(line = 2, lineText = "header", before = listOf("first"))
         val result = resolver.resolve(c, current)
         assertEquals(2, result.line)
+        assertEquals(FileCommentStatus.OPEN, result.status)
+    }
+
+    @Test
+    fun `multiple matches disambiguated by contextAfter`() {
+        val current = listOf("header", "alpha", "header", "beta")
+        val c = comment(line = 3, lineText = "header", after = listOf("beta"))
+        val result = resolver.resolve(c, current)
+        assertEquals(3, result.line)
+        assertEquals(FileCommentStatus.OPEN, result.status)
     }
 
     @Test
