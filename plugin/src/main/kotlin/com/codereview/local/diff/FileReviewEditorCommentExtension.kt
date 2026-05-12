@@ -14,6 +14,7 @@ import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.editor.event.EditorMouseEvent
 import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.editor.event.EditorMouseMotionListener
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.editor.impl.EditorEmbeddedComponentManager
 import com.intellij.openapi.editor.impl.EditorImpl
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -53,6 +54,17 @@ import javax.swing.SwingUtilities
  */
 class FileReviewEditorCommentExtension : EditorFactoryListener {
 
+    companion object {
+        private val STATE_KEY = Key.create<EditorState>("FileReviewEditorCommentExtension.state")
+    }
+
+    private class EditorState(
+        val motionListener: EditorMouseMotionListener,
+        val mouseListener: EditorMouseListener,
+        var currentHighlighter: RangeHighlighter? = null,
+        var currentLine: Int = -1
+    )
+
     override fun editorCreated(event: EditorFactoryEvent) {
         val editor = event.editor
         // Only handle real editors (not diff viewers, console, etc.)
@@ -70,45 +82,59 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         installGutterAffordance(editor, project, targetFile)
     }
 
+    override fun editorReleased(event: EditorFactoryEvent) {
+        val editor = event.editor
+        val state = editor.getUserData(STATE_KEY) ?: return
+        editor.removeEditorMouseMotionListener(state.motionListener)
+        editor.removeEditorMouseListener(state.mouseListener)
+        state.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+        state.currentHighlighter = null
+        editor.putUserData(STATE_KEY, null)
+    }
+
     private fun installGutterAffordance(editor: Editor, project: Project, targetFile: Path) {
-        var currentHighlighter: RangeHighlighter? = null
-        var currentLine: Int = -1
+        val state = EditorState(
+            motionListener = object : EditorMouseMotionListener {
+                override fun mouseMoved(e: EditorMouseEvent) {
+                    val editorState = editor.getUserData(STATE_KEY) ?: return
+                    val line = e.logicalPosition.line
 
-        editor.addEditorMouseMotionListener(object : EditorMouseMotionListener {
-            override fun mouseMoved(e: EditorMouseEvent) {
-                val line = e.logicalPosition.line
+                    if (line != editorState.currentLine) {
+                        editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                        editorState.currentHighlighter = null
+                        editorState.currentLine = -1
+                    }
 
-                if (line != currentLine) {
-                    currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
-                    currentHighlighter = null
-                    currentLine = -1
-                }
+                    if (line != editorState.currentLine && line >= 0 && line < editor.document.lineCount) {
+                        editorState.currentLine = line
+                        val startOffset = editor.document.getLineStartOffset(line)
+                        val endOffset = editor.document.getLineEndOffset(line)
 
-                if (line != currentLine && line >= 0 && line < editor.document.lineCount) {
-                    currentLine = line
-                    val startOffset = editor.document.getLineStartOffset(line)
-                    val endOffset = editor.document.getLineEndOffset(line)
-
-                    currentHighlighter = editor.markupModel.addRangeHighlighter(
-                        startOffset,
-                        endOffset,
-                        HighlighterLayer.LAST,
-                        null,
-                        HighlighterTargetArea.LINES_IN_RANGE
-                    ).apply {
-                        gutterIconRenderer = AddCommentGutterIcon(editor, project, targetFile, line + 1)
+                        editorState.currentHighlighter = editor.markupModel.addRangeHighlighter(
+                            startOffset,
+                            endOffset,
+                            HighlighterLayer.LAST,
+                            null,
+                            HighlighterTargetArea.LINES_IN_RANGE
+                        ).apply {
+                            gutterIconRenderer = AddCommentGutterIcon(editor, project, targetFile, line + 1)
+                        }
                     }
                 }
+            },
+            mouseListener = object : EditorMouseListener {
+                override fun mouseExited(e: EditorMouseEvent) {
+                    val editorState = editor.getUserData(STATE_KEY) ?: return
+                    editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                    editorState.currentHighlighter = null
+                    editorState.currentLine = -1
+                }
             }
-        })
+        )
 
-        editor.addEditorMouseListener(object : EditorMouseListener {
-            override fun mouseExited(e: EditorMouseEvent) {
-                currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
-                currentHighlighter = null
-                currentLine = -1
-            }
-        })
+        editor.putUserData(STATE_KEY, state)
+        editor.addEditorMouseMotionListener(state.motionListener)
+        editor.addEditorMouseListener(state.mouseListener)
     }
 
     private fun showInlineCommentForm(editor: Editor, project: Project, targetFile: Path, line: Int) {
