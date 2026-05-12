@@ -7,6 +7,8 @@ import com.codereview.local.model.FileComment
 import com.codereview.local.model.FileCommentStatus
 import com.codereview.local.services.AgentProcessService
 import com.codereview.local.services.FileReviewService
+import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
@@ -71,16 +73,15 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     private fun showReview(targetFile: Path) {
+        if (!targetFile.toFile().exists()) {
+            renderError("File no longer exists: ${targetFile.fileName}. Use Accept & close to discard.")
+            return
+        }
         val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
         val data = try {
             review.refresh(review.loadOrInit())
         } catch (e: Exception) {
             renderError("Could not load review for ${targetFile.fileName}: ${e.message}")
-            return
-        }
-        if (!targetFile.toFile().exists()) {
-            renderError("File no longer exists: ${targetFile.fileName}. Use Accept & close to discard.")
-            current = review to data
             return
         }
         current = review to data
@@ -94,15 +95,32 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         commentsListModel.clear()
     }
 
+    private fun resolveAgent() = run {
+        val savedId = PropertiesComponent.getInstance(project).getValue("reviewDuet.selectedAgentId")
+        if (savedId != null) AgentRegistry.getAll().find { it.id == savedId } else null
+    } ?: AgentRegistry.getAll().firstOrNull()
+
     private fun onProcess() {
         val (review, data) = current ?: return
-        val provider = AgentRegistry.getAll().firstOrNull() ?: return
+        val provider = resolveAgent()
+        if (provider == null) {
+            com.intellij.openapi.ui.Messages.showErrorDialog(
+                project,
+                "No agent configured. Pick one in the Review Duet toolbar.",
+                "No Agent"
+            )
+            return
+        }
         AgentProcessService.getInstance(project).runProcess(
             workingDir = project.basePath ?: return,
             reviewFilePath = review.storageFile.toString(),
             provider = provider,
             skillFolder = "review-duet:process-file",
-            onFinished = { showReview(Path.of(data.filePath)) }
+            onFinished = {
+                ApplicationManager.getApplication().invokeLater {
+                    showReview(Path.of(data.filePath))
+                }
+            }
         )
     }
 
