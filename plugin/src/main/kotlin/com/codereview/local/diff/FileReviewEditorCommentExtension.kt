@@ -36,10 +36,13 @@ import com.intellij.ui.RoundedLineBorder
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.hover.HoverStateListener
+import com.intellij.util.ui.InlineIconButton
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
+import java.awt.CardLayout
 import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
@@ -103,12 +106,14 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
             state.commentInlays.clear()
 
             val editorImpl = editor as? EditorImpl ?: return
+            val vfile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
+            val targetFile = Path.of(vfile.path)
 
             for (c in data.comments) {
                 val lineIdx = (c.line - 1).coerceIn(0, maxOf(0, editor.document.lineCount - 1))
                 val offset = editor.document.getLineEndOffset(lineIdx)
 
-                val commentPanel = createFileCommentPanel(c, editor)
+                val commentPanel = createFileCommentPanel(c, editor, project, targetFile, state)
                 val wrappedPanel = EditorWidthPanel(editorImpl, commentPanel)
 
                 val properties = EditorEmbeddedComponentManager.Properties(
@@ -146,84 +151,335 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         }
 
         /**
-         * Builds a compact read-only panel displaying a single [FileComment] as an inlay.
+         * Builds a panel displaying a single [FileComment] as an inlay with Edit and Delete controls.
+         * Edit flips to an inline form pre-filled with the current text; Delete shows a confirmation
+         * dialog before removing the comment via [FileReviewPanel].
          *
          * Visual treatment:
          * - OPEN — normal foreground text, amber status badge.
          * - FIXED — dimmed text (gray), green status badge.
          * - OUTDATED — dimmed text (gray) with HTML strikethrough, gray status badge.
          */
-        private fun createFileCommentPanel(comment: FileComment, editor: Editor): JComponent {
+        private fun createFileCommentPanel(
+            comment: FileComment,
+            editor: Editor,
+            project: Project,
+            targetFile: Path,
+            state: EditorState
+        ): JComponent {
             val colorsScheme = EditorColorsManager.getInstance().globalScheme
             val bgColor = colorsScheme.defaultBackground
             val fgColor = colorsScheme.defaultForeground
             val borderColor = colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: JBColor.border()
+            val inlayPadding = 6
 
+            val cardLayout = CardLayout()
+            var currentCard: JComponent? = null
+            val cardPanel = object : JPanel(cardLayout) {
+                override fun getPreferredSize(): Dimension =
+                    currentCard?.preferredSize ?: super.getPreferredSize()
+            }.apply { isOpaque = false }
+
+            var displayPanel: JComponent? = null
+            var editPanel: JComponent? = null
+
+            displayPanel = createFileCommentDisplayPanel(
+                comment, bgColor, fgColor, borderColor, inlayPadding,
+                onEdit = {
+                    currentCard = editPanel
+                    cardLayout.show(cardPanel, "edit")
+                    cardPanel.revalidate()
+                    cardPanel.repaint()
+                },
+                onDelete = {
+                    val result = Messages.showYesNoDialog(
+                        project,
+                        "Delete this comment?",
+                        "Delete Comment",
+                        Messages.getQuestionIcon()
+                    )
+                    if (result == Messages.YES) {
+                        val panel = ToolWindowManager.getInstance(project)
+                            .getToolWindow("Review Duet Files")
+                            ?.contentManager?.contents?.firstOrNull()
+                            ?.component as? FileReviewPanel
+                        if (panel != null) {
+                            panel.deleteComment(targetFile, comment.id)
+                        } else {
+                            Messages.showInfoMessage(
+                                project,
+                                "Open the file via \"Review File with Review Duet\" first to manage comments.",
+                                "Review Duet Files panel not open"
+                            )
+                        }
+                    }
+                }
+            )
+
+            editPanel = createFileCommentEditPanel(
+                comment, editor, project, targetFile, state, bgColor, fgColor, borderColor, inlayPadding,
+                onCancel = {
+                    currentCard = displayPanel
+                    cardLayout.show(cardPanel, "display")
+                    cardPanel.revalidate()
+                    cardPanel.repaint()
+                }
+            )
+
+            cardPanel.add(displayPanel, "display")
+            cardPanel.add(editPanel, "edit")
+            currentCard = displayPanel
+            cardLayout.show(cardPanel, "display")
+
+            return JPanel(BorderLayout()).apply {
+                isOpaque = false
+                border = JBUI.Borders.empty(4, 8, 4, 8)
+                add(cardPanel, BorderLayout.NORTH)
+            }
+        }
+
+        private fun createFileCommentDisplayPanel(
+            comment: FileComment,
+            bgColor: Color,
+            fgColor: Color,
+            borderColor: Color,
+            inlayPadding: Int,
+            onEdit: () -> Unit,
+            onDelete: () -> Unit
+        ): JComponent {
             val dimColor = UIUtil.getContextHelpForeground()
-
             val statusColor = when (comment.status) {
                 FileCommentStatus.OPEN -> Color(255, 193, 7)
                 FileCommentStatus.FIXED -> Color(76, 175, 80)
                 FileCommentStatus.OUTDATED -> Color(158, 158, 158)
             }
 
-            val card = JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            val hoverPanel = object : JPanel(BorderLayout()) {
+                override fun getBackground(): Color = super.getBackground() ?: bgColor
+            }.apply {
                 isOpaque = true
                 background = bgColor
                 cursor = Cursor.getDefaultCursor()
                 border = BorderFactory.createCompoundBorder(
                     RoundedLineBorder(borderColor, 8, 1),
-                    JBUI.Borders.empty(6)
+                    JBUI.Borders.empty(inlayPadding)
                 )
             }
 
-            // Header: #<id> + status badge
-            val headerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+            val contentPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
                 isOpaque = false
             }
-            val idLabel = JBLabel("#${comment.id}").apply {
-                font = JBFont.small()
-                foreground = dimColor
+
+            val headerPanel = object : JPanel(BorderLayout()) {
+                override fun getMaximumSize(): Dimension {
+                    val pref = preferredSize
+                    return Dimension(Int.MAX_VALUE, pref.height)
+                }
+            }.apply { isOpaque = false }
+
+            val tagWrapper = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+                isOpaque = false
+                border = JBUI.Borders.empty()
+                add(JBLabel("#${comment.id}").apply {
+                    font = JBFont.small()
+                    foreground = dimColor
+                })
+                add(JBLabel(" ${comment.status.jsonValue} ").apply {
+                    font = JBFont.small()
+                    foreground = statusColor
+                    border = BorderFactory.createLineBorder(statusColor, 1)
+                })
             }
-            val statusBadge = JBLabel(" ${comment.status.jsonValue} ").apply {
-                font = JBFont.small()
-                foreground = statusColor
-                border = BorderFactory.createLineBorder(statusColor, 1)
+
+            val actionsPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply {
+                isOpaque = false
+                isVisible = false
             }
-            headerPanel.add(idLabel)
-            headerPanel.add(statusBadge)
-            card.add(headerPanel)
+
+            val editButton = InlineIconButton(
+                AllIcons.General.Inline_edit,
+                AllIcons.General.Inline_edit_hovered
+            ).apply {
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                actionListener = java.awt.event.ActionListener { onEdit() }
+            }
+            actionsPanel.add(editButton)
+
+            val deleteButton = InlineIconButton(
+                AllIcons.Actions.GC,
+                AllIcons.Actions.GC
+            ).apply {
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                actionListener = java.awt.event.ActionListener { onDelete() }
+            }
+            actionsPanel.add(deleteButton)
+
+            headerPanel.add(tagWrapper, BorderLayout.WEST)
+            headerPanel.add(actionsPanel, BorderLayout.EAST)
+            contentPanel.add(headerPanel)
+            contentPanel.add(javax.swing.Box.createVerticalStrut(4))
 
             // Comment text — dimmed for FIXED; strikethrough + dimmed for OUTDATED
             if (comment.status == FileCommentStatus.OUTDATED) {
-                // JTextArea doesn't support strikethrough; use an HTML label instead
                 val strikeLabel = JBLabel("<html><strike>${escapeHtml(comment.text)}</strike></html>").apply {
                     foreground = dimColor
                     font = UIUtil.getLabelFont()
                     border = JBUI.Borders.emptyTop(4)
                 }
-                card.add(strikeLabel)
+                contentPanel.add(strikeLabel)
             } else {
                 val textFg = if (comment.status == FileCommentStatus.OPEN) fgColor else dimColor
-                val textArea = JTextArea(comment.text).apply {
+                val textArea = object : JTextArea(comment.text) {
+                    override fun getMaximumSize(): Dimension {
+                        val pref = preferredSize
+                        return Dimension(Int.MAX_VALUE, pref.height)
+                    }
+                }.apply {
                     isEditable = false
                     isOpaque = false
                     lineWrap = true
                     wrapStyleWord = true
                     foreground = textFg
                     font = UIUtil.getLabelFont()
-                    border = JBUI.Borders.emptyTop(4)
+                    border = JBUI.Borders.empty()
                     cursor = Cursor.getDefaultCursor()
                 }
-                card.add(textArea)
+                contentPanel.add(textArea)
             }
 
-            return JPanel(BorderLayout()).apply {
-                isOpaque = false
-                border = JBUI.Borders.empty(4, 8, 4, 8)
-                add(card, BorderLayout.CENTER)
+            contentPanel.add(javax.swing.Box.createVerticalGlue())
+            hoverPanel.add(contentPanel, BorderLayout.NORTH)
+
+            object : HoverStateListener() {
+                override fun hoverChanged(component: java.awt.Component, hovered: Boolean) {
+                    actionsPanel.isVisible = hovered
+                    hoverPanel.background = if (hovered) {
+                        JBColor(Color(0, 0, 0, 20), Color(255, 255, 255, 20))
+                    } else {
+                        bgColor
+                    }
+                }
+            }.addTo(hoverPanel)
+
+            return hoverPanel
+        }
+
+        private fun createFileCommentEditPanel(
+            comment: FileComment,
+            editor: Editor,
+            project: Project,
+            targetFile: Path,
+            state: EditorState,
+            bgColor: Color,
+            fgColor: Color,
+            borderColor: Color,
+            inlayPadding: Int,
+            onCancel: () -> Unit
+        ): JComponent {
+            val originalText = comment.text
+
+            val panel = JPanel(BorderLayout()).apply {
+                isOpaque = true
+                background = bgColor
+                cursor = Cursor.getDefaultCursor()
+                border = BorderFactory.createCompoundBorder(
+                    RoundedLineBorder(borderColor, 8, 1),
+                    JBUI.Borders.empty(inlayPadding)
+                )
             }
+
+            val textArea = JBTextArea(originalText).apply {
+                rows = 3
+                lineWrap = true
+                wrapStyleWord = true
+                isEditable = true
+                background = UIUtil.getTextFieldBackground()
+                foreground = fgColor
+                caretColor = fgColor
+                border = JBUI.Borders.empty(6)
+            }
+
+            val scrollPane = JBScrollPane(textArea).apply {
+                border = JBUI.Borders.customLine(JBColor.border(), 1)
+            }
+
+            val bottomPanel = JPanel(BorderLayout()).apply {
+                isOpaque = false
+                cursor = Cursor.getDefaultCursor()
+                border = JBUI.Borders.emptyTop(8)
+            }
+
+            val hintLabel = JBLabel("Ctrl+Enter to save").apply {
+                foreground = UIUtil.getContextHelpForeground()
+                font = JBFont.small()
+            }
+
+            val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
+                isOpaque = false
+                cursor = Cursor.getDefaultCursor()
+            }
+
+            val saveAndRefresh = {
+                val newText = textArea.text.trim()
+                if (newText.isNotBlank() && newText != originalText) {
+                    val filePanel = ToolWindowManager.getInstance(project)
+                        .getToolWindow("Review Duet Files")
+                        ?.contentManager?.contents?.firstOrNull()
+                        ?.component as? FileReviewPanel
+                    if (filePanel != null) {
+                        filePanel.editComment(targetFile, comment.id, newText)
+                    } else {
+                        Messages.showInfoMessage(
+                            project,
+                            "Open the file via \"Review File with Review Duet\" first to manage comments.",
+                            "Review Duet Files panel not open"
+                        )
+                    }
+                } else {
+                    // Re-render inlays to flip back to display mode even if text unchanged
+                    refreshInlaysForFile(project, targetFile)
+                }
+            }
+
+            buttonPanel.add(JButton("Cancel").apply {
+                isContentAreaFilled = false
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                addActionListener { onCancel() }
+            })
+
+            buttonPanel.add(JButton("Save").apply {
+                isContentAreaFilled = false
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                addActionListener { saveAndRefresh() }
+            })
+
+            bottomPanel.add(hintLabel, BorderLayout.WEST)
+            bottomPanel.add(buttonPanel, BorderLayout.EAST)
+
+            panel.add(scrollPane, BorderLayout.CENTER)
+            panel.add(bottomPanel, BorderLayout.SOUTH)
+
+            textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("control ENTER"), "save")
+            textArea.actionMap.put("save", object : AbstractAction() {
+                override fun actionPerformed(e: java.awt.event.ActionEvent?) { saveAndRefresh() }
+            })
+
+            textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "cancel")
+            textArea.actionMap.put("cancel", object : AbstractAction() {
+                override fun actionPerformed(e: java.awt.event.ActionEvent?) { onCancel() }
+            })
+
+            panel.addComponentListener(object : java.awt.event.ComponentAdapter() {
+                override fun componentShown(e: java.awt.event.ComponentEvent?) {
+                    SwingUtilities.invokeLater {
+                        textArea.requestFocusInWindow()
+                        textArea.selectAll()
+                    }
+                }
+            })
+
+            return DiffCommentExtension.wrapForFocusIsolation(panel)
         }
 
         private fun escapeHtml(text: String): String =

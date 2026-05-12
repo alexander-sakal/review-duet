@@ -193,6 +193,28 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         current = review to data
     }
 
+    fun editComment(targetFile: Path, commentId: Int, newText: String) {
+        val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
+        val data = review.loadOrInit()
+        val idx = data.comments.indexOfFirst { it.id == commentId }
+        if (idx < 0) return
+        data.comments[idx] = data.comments[idx].copy(text = newText)
+        review.save(data)
+        FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
+        upsertFileNode(targetFile, review, data)
+        selectFileNode(targetFile)
+    }
+
+    fun deleteComment(targetFile: Path, commentId: Int) {
+        val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
+        val data = review.loadOrInit()
+        data.comments.removeAll { it.id == commentId }
+        review.save(data)
+        FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
+        upsertFileNode(targetFile, review, data)
+        selectFileNode(targetFile)
+    }
+
     private fun sliceLines(doc: com.intellij.openapi.editor.Document, fromLine: Int, toLine: Int): List<String> {
         val result = mutableListOf<String>()
         for (i in fromLine..toLine) {
