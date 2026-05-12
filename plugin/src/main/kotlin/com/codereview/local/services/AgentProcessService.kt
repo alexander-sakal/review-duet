@@ -54,6 +54,7 @@ class AgentProcessService(private val project: Project) {
         workingDir: String,
         reviewFilePath: String,
         provider: AgentProvider,
+        skillFolder: String = "review-duet:process",
         onFinished: (() -> Unit)? = null
     ) {
         if (isRunning(workingDir)) {
@@ -64,7 +65,7 @@ class AgentProcessService(private val project: Project) {
         val repoName = java.io.File(workingDir).name
         val tabName = "Review Duet — $repoName"
 
-        val skillContent = loadSkillContent(workingDir)
+        val skillContent = loadSkillContent(workingDir, skillFolder)
         val commandLine = provider.buildCommand(workingDir, reviewFilePath, skillContent)
         val handler = ColoredProcessHandler(commandLine)
         val console = TextConsoleBuilderFactory.getInstance().createBuilder(project).console
@@ -111,11 +112,10 @@ class AgentProcessService(private val project: Project) {
         }
     }
 
-    private fun loadSkillContent(workingDir: String): String {
-        // Look for skill in standard locations
+    private fun loadSkillContent(workingDir: String, skillFolder: String): String {
         val candidates = listOf(
-            java.io.File(workingDir, "skills/review-duet:process/SKILL.md"),
-            java.io.File(System.getProperty("user.home"), ".claude/skills/review-duet:process/SKILL.md")
+            java.io.File(workingDir, "skills/$skillFolder/SKILL.md"),
+            java.io.File(System.getProperty("user.home"), ".claude/skills/$skillFolder/SKILL.md")
         )
         for (candidate in candidates) {
             if (candidate.exists()) {
