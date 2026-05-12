@@ -35,6 +35,9 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
         /** For tests — pin the repo root explicitly. */
         fun standalone(repoRoot: Path): FileReviewService =
             FileReviewService { repoRoot }
+
+        fun encodeRelativePath(path: String): String =
+            path.replace("%", "%25").replace("/", "%2F")
     }
 
     private val reviews = ConcurrentHashMap<Path, FileReview>()
@@ -47,7 +50,7 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
         if (relative.startsWith("..")) {
             throw IllegalStateException("Target file $targetFile is outside repo root $repoRoot")
         }
-        val storage = repoRoot.resolve(".review-duet/files").resolve("$relative.json")
+        val storage = repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")
         val review = FileReview(targetFile, storage)
         reviews[targetFile] = review
         return review
@@ -66,6 +69,6 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
         val repoRoot = resolveRepoRoot(targetFile) ?: return null
         val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
         if (relative.startsWith("..")) return null
-        return repoRoot.resolve(".review-duet/files").resolve("$relative.json")
+        return repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")
     }
 }

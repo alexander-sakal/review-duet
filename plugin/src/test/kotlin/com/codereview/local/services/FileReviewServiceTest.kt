@@ -37,7 +37,7 @@ class FileReviewServiceTest {
     }
 
     @Test
-    fun `storage path mirrors the source directory layout`(@TempDir tmp: Path) {
+    fun `storage path encodes path separators`(@TempDir tmp: Path) {
         val target = tmp.resolve("docs/sub/foo.md").also {
             it.parent.createDirectories()
             it.writeText("x")
@@ -46,8 +46,15 @@ class FileReviewServiceTest {
         val review = service.openOrCreate(target)
         review.loadOrInit()
 
-        val expected = tmp.resolve(".review-duet/files/docs/sub/foo.md.json")
+        val expected = tmp.resolve(".review-duet/files/docs%2Fsub%2Ffoo.md.json")
         assertTrue(expected.exists(), "expected $expected to exist")
+    }
+
+    @Test
+    fun `paths containing percent sign are escaped`(@TempDir tmp: Path) {
+        val service = FileReviewService.standalone(repoRoot = tmp)
+        val encoded = FileReviewService.encodeRelativePath("a%b/c.md")
+        assertEquals("a%25b%2Fc.md", encoded)
     }
 
     @Test
