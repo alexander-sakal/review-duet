@@ -17,6 +17,7 @@
                     factoryClass="com.codereview.local.ui.FileReviewToolWindowFactory"
                     icon="AllIcons.FileTypes.Text"/>
         <diff.DiffExtension implementation="com.codereview.local.diff.DiffCommentExtension"/>
+        <editorFactoryListener implementation="com.codereview.local.diff.FileReviewEditorCommentExtension"/>
         <notificationGroup id="Review Duet" displayType="BALLOON"/>
     </extensions>
 
