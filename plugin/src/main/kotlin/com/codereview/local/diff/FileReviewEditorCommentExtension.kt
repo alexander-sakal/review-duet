@@ -1,11 +1,17 @@
 package com.codereview.local.diff
 
+import com.codereview.local.model.FileComment
+import com.codereview.local.model.FileCommentStatus
+import com.codereview.local.model.FileReviewData
 import com.codereview.local.services.FileReviewService
 import com.codereview.local.ui.FileReviewPanel
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.EditorKind
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.colors.EditorColors
 import com.intellij.openapi.editor.colors.EditorColorsManager
@@ -41,9 +47,11 @@ import java.awt.FlowLayout
 import java.nio.file.Path
 import javax.swing.AbstractAction
 import javax.swing.BorderFactory
+import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTextArea
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 
@@ -69,7 +77,157 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
             val vfile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
             val targetFile = Path.of(vfile.path)
             installGutterAffordance(editor, project, targetFile)
+
+            // Render existing comments as inlays now that the state is set.
+            val state = editor.getUserData(STATE_KEY) ?: return
+            val service = FileReviewService.getInstance(project)
+            val review = service.openOrCreate(targetFile)
+            val data = try { review.loadOrInit() } catch (_: Exception) { return }
+            ApplicationManager.getApplication().invokeLater {
+                renderCommentInlays(editor, project, data, state)
+            }
         }
+
+        /**
+         * Renders [FileComment] inlays below each anchored line in [editor].
+         * Disposes any previously rendered inlays first, making this idempotent.
+         * Must be called on the EDT.
+         */
+        internal fun renderCommentInlays(
+            editor: Editor,
+            project: Project,
+            data: FileReviewData,
+            state: EditorState
+        ) {
+            state.commentInlays.forEach { it.dispose() }
+            state.commentInlays.clear()
+
+            val editorImpl = editor as? EditorImpl ?: return
+
+            for (c in data.comments) {
+                val lineIdx = (c.line - 1).coerceIn(0, maxOf(0, editor.document.lineCount - 1))
+                val offset = editor.document.getLineEndOffset(lineIdx)
+
+                val commentPanel = createFileCommentPanel(c, editor)
+                val wrappedPanel = EditorWidthPanel(editorImpl, commentPanel)
+
+                val properties = EditorEmbeddedComponentManager.Properties(
+                    EditorEmbeddedComponentManager.ResizePolicy.none(),
+                    null,
+                    false,
+                    false,
+                    0,
+                    offset
+                )
+
+                val inlay = EditorEmbeddedComponentManager.getInstance()
+                    .addComponent(editorImpl, wrappedPanel, properties)
+                inlay?.let { state.commentInlays.add(it) }
+            }
+        }
+
+        /**
+         * Re-renders inlays for [targetFile] in every open main editor that shows that file.
+         * Safe to call from any thread — dispatches to the EDT internally.
+         */
+        internal fun refreshInlaysForFile(project: Project, targetFile: Path) {
+            ApplicationManager.getApplication().invokeLater {
+                val targetPath = targetFile.toString()
+                EditorFactory.getInstance().allEditors.forEach { editor ->
+                    val vfile = FileDocumentManager.getInstance().getFile(editor.document) ?: return@forEach
+                    if (vfile.path != targetPath || editor.editorKind != EditorKind.MAIN_EDITOR) return@forEach
+                    val state = editor.getUserData(STATE_KEY) ?: return@forEach
+                    val service = FileReviewService.getInstance(project)
+                    val review = service.openOrCreate(targetFile)
+                    val data = try { review.loadOrInit() } catch (_: Exception) { return@forEach }
+                    renderCommentInlays(editor, project, data, state)
+                }
+            }
+        }
+
+        /**
+         * Builds a compact read-only panel displaying a single [FileComment] as an inlay.
+         *
+         * Visual treatment:
+         * - OPEN — normal foreground text, amber status badge.
+         * - FIXED — dimmed text (gray), green status badge.
+         * - OUTDATED — dimmed text (gray) with HTML strikethrough, gray status badge.
+         */
+        private fun createFileCommentPanel(comment: FileComment, editor: Editor): JComponent {
+            val colorsScheme = EditorColorsManager.getInstance().globalScheme
+            val bgColor = colorsScheme.defaultBackground
+            val fgColor = colorsScheme.defaultForeground
+            val borderColor = colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: JBColor.border()
+
+            val dimColor = UIUtil.getContextHelpForeground()
+
+            val statusColor = when (comment.status) {
+                FileCommentStatus.OPEN -> Color(255, 193, 7)
+                FileCommentStatus.FIXED -> Color(76, 175, 80)
+                FileCommentStatus.OUTDATED -> Color(158, 158, 158)
+            }
+
+            val card = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                isOpaque = true
+                background = bgColor
+                cursor = Cursor.getDefaultCursor()
+                border = BorderFactory.createCompoundBorder(
+                    RoundedLineBorder(borderColor, 8, 1),
+                    JBUI.Borders.empty(6)
+                )
+            }
+
+            // Header: #<id> + status badge
+            val headerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+                isOpaque = false
+            }
+            val idLabel = JBLabel("#${comment.id}").apply {
+                font = JBFont.small()
+                foreground = dimColor
+            }
+            val statusBadge = JBLabel(" ${comment.status.jsonValue} ").apply {
+                font = JBFont.small()
+                foreground = statusColor
+                border = BorderFactory.createLineBorder(statusColor, 1)
+            }
+            headerPanel.add(idLabel)
+            headerPanel.add(statusBadge)
+            card.add(headerPanel)
+
+            // Comment text — dimmed for FIXED; strikethrough + dimmed for OUTDATED
+            if (comment.status == FileCommentStatus.OUTDATED) {
+                // JTextArea doesn't support strikethrough; use an HTML label instead
+                val strikeLabel = JBLabel("<html><strike>${escapeHtml(comment.text)}</strike></html>").apply {
+                    foreground = dimColor
+                    font = UIUtil.getLabelFont()
+                    border = JBUI.Borders.emptyTop(4)
+                }
+                card.add(strikeLabel)
+            } else {
+                val textFg = if (comment.status == FileCommentStatus.OPEN) fgColor else dimColor
+                val textArea = JTextArea(comment.text).apply {
+                    isEditable = false
+                    isOpaque = false
+                    lineWrap = true
+                    wrapStyleWord = true
+                    foreground = textFg
+                    font = UIUtil.getLabelFont()
+                    border = JBUI.Borders.emptyTop(4)
+                    cursor = Cursor.getDefaultCursor()
+                }
+                card.add(textArea)
+            }
+
+            return JPanel(BorderLayout()).apply {
+                isOpaque = false
+                border = JBUI.Borders.empty(4, 8, 4, 8)
+                add(card, BorderLayout.CENTER)
+            }
+        }
+
+        private fun escapeHtml(text: String): String =
+            text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
         private fun installGutterAffordance(editor: Editor, project: Project, targetFile: Path) {
             val state = EditorState(
@@ -259,7 +417,8 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         val motionListener: EditorMouseMotionListener,
         val mouseListener: EditorMouseListener,
         var currentHighlighter: RangeHighlighter? = null,
-        var currentLine: Int = -1
+        var currentLine: Int = -1,
+        val commentInlays: MutableList<Inlay<*>> = mutableListOf()
     )
 
     override fun editorCreated(event: EditorFactoryEvent) {
@@ -286,6 +445,8 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         editor.removeEditorMouseListener(state.mouseListener)
         state.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
         state.currentHighlighter = null
+        state.commentInlays.forEach { it.dispose() }
+        state.commentInlays.clear()
         editor.putUserData(STATE_KEY, null)
     }
 

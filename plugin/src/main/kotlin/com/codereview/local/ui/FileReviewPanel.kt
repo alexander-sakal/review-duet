@@ -1,6 +1,7 @@
 package com.codereview.local.ui
 
 import com.codereview.local.agents.AgentRegistry
+import com.codereview.local.diff.FileReviewEditorCommentExtension
 import com.codereview.local.model.FileReview
 import com.codereview.local.model.FileReviewData
 import com.codereview.local.model.FileComment
@@ -142,6 +143,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             )
         )
         review.save(data)
+        FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
         upsertFileNode(targetFile, review, data)
         selectFileNode(targetFile)
         current = review to data
@@ -251,6 +253,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             onFinished = {
                 ApplicationManager.getApplication().invokeLater {
                     openReview(Path.of(data.filePath))
+                    FileReviewEditorCommentExtension.refreshInlaysForFile(project, Path.of(data.filePath))
                 }
             }
         )
@@ -327,6 +330,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             current?.first?.save(data)
             ApplicationManager.getApplication().invokeLater {
                 refreshCommentsForCurrent()
+                FileReviewEditorCommentExtension.refreshInlaysForFile(project, Path.of(data.filePath))
             }
         }
     }
