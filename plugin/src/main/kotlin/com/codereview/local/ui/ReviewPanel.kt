@@ -236,8 +236,16 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
             val commits = review.gitService.getRecentCommits(100)
             val baseBranch = review.gitService.getBaseBranch()
             val newCommitShas = baseBranch?.let { review.gitService.getNewCommitShas(it) } ?: emptySet()
-            commitComboBox = JComboBox(DefaultComboBoxModel(commits.toTypedArray())).apply {
-                if (commits.isNotEmpty()) selectedIndex = 0
+
+            // Build items: branch entries first, then commits
+            val items = mutableListOf<CommitInfo>()
+            if (baseBranch != null) {
+                items.add(CommitInfo(sha = baseBranch, shortSha = baseBranch, message = "", isBranch = true))
+            }
+            items.addAll(commits)
+
+            commitComboBox = JComboBox(DefaultComboBoxModel(items.toTypedArray())).apply {
+                if (items.isNotEmpty()) selectedIndex = 0
                 renderer = CommitCellRenderer(newCommitShas)
             }
             add(commitComboBox, gbc)
@@ -284,11 +292,16 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
 
     private fun showActiveReviewPanel(data: com.codereview.local.model.ReviewData) {
         // Header - show repo, branch, base commit and progress
-        val commitInfo = review.gitService.getCommitInfo(data.baseCommit)
-        val commitDisplay = if (commitInfo != null) {
-            "${commitInfo.shortSha} ${commitInfo.message}"
+        val isBranchBase = review.gitService.branchExists(data.baseCommit)
+        val commitDisplay = if (isBranchBase) {
+            "Branch: ${data.baseCommit}"
         } else {
-            data.baseCommit.take(7)
+            val commitInfo = review.gitService.getCommitInfo(data.baseCommit)
+            if (commitInfo != null) {
+                "${commitInfo.shortSha} ${commitInfo.message}"
+            } else {
+                data.baseCommit.take(7)
+            }
         }
         val currentBranch = review.gitService.getCurrentBranch() ?: "unknown"
         val headerPanel = JBPanel<JBPanel<*>>().apply {
@@ -485,25 +498,29 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         if (selectedCommit == null) {
             com.intellij.openapi.ui.Messages.showErrorDialog(
                 project,
-                "Please select a commit to start the review from.",
-                "No Commit Selected"
+                "Please select a commit or branch to start the review from.",
+                "No Selection"
             )
             return
         }
 
-        // Get parent of selected commit as the baseline
-        // This way "review from commit X" means X is included in the review
-        val parentSha = review.gitService.getParentCommitSha(selectedCommit.sha)
-        if (parentSha == null) {
-            com.intellij.openapi.ui.Messages.showErrorDialog(
-                project,
-                "Cannot start review from the initial commit (no parent).",
-                "Invalid Selection"
-            )
-            return
+        if (selectedCommit.isBranch) {
+            // Store branch name directly — merge-base resolves correctly after merges
+            review.initialize(selectedCommit.sha)
+        } else {
+            // Get parent of selected commit as the baseline
+            // This way "review from commit X" means X is included in the review
+            val parentSha = review.gitService.getParentCommitSha(selectedCommit.sha)
+            if (parentSha == null) {
+                com.intellij.openapi.ui.Messages.showErrorDialog(
+                    project,
+                    "Cannot start review from the initial commit (no parent).",
+                    "Invalid Selection"
+                )
+                return
+            }
+            review.initialize(parentSha)
         }
-
-        review.initialize(parentSha)
         refresh()
     }
 
@@ -552,9 +569,13 @@ private class CommitCellRenderer(
         )
 
         if (component is javax.swing.JLabel && value != null) {
-            val isInBaseBranch = value.sha !in newCommitShas
-            if (isInBaseBranch && !isSelected) {
-                component.foreground = JBColor.GRAY
+            if (value.isBranch) {
+                component.font = component.font.deriveFont(java.awt.Font.BOLD)
+            } else {
+                val isInBaseBranch = value.sha !in newCommitShas
+                if (isInBaseBranch && !isSelected) {
+                    component.foreground = JBColor.GRAY
+                }
             }
         }
 

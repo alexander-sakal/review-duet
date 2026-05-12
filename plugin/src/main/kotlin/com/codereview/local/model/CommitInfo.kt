@@ -3,10 +3,12 @@ package com.codereview.local.model
 data class CommitInfo(
     val sha: String,
     val shortSha: String,
-    val message: String
+    val message: String,
+    val isBranch: Boolean = false
 ) {
     val displayText: String
         get() {
+            if (isBranch) return "Branch: $sha"
             val truncated = if (message.length > 40) message.take(40) + "..." else message
             return "$truncated ($shortSha)"
         }

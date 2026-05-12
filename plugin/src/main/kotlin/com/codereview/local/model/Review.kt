@@ -194,7 +194,10 @@ class Review(
     fun hasChangesToReview(): Boolean {
         val data = loadData() ?: return false
         val currentHead = gitService.getCurrentCommitSha() ?: return false
-        if (data.baseCommit == currentHead) return false
+
+        // For branch bases, use merge-base to find the actual comparison point
+        val baseRef = gitService.getMergeBase(data.baseCommit, "HEAD") ?: data.baseCommit
+        if (baseRef == currentHead) return false
 
         val changedFiles = gitService.getChangedFilePaths(data.baseCommit, currentHead)
         return changedFiles.isNotEmpty()
