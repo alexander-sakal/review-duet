@@ -2,10 +2,10 @@
 
 import { ReviewStore } from './store';
 import { listComments } from './commands/list';
-import { markAsFixed } from './commands/fix';
+import { markAsFixed, markFileCommentAsFixed } from './commands/fix';
 import { showComment } from './commands/show';
 import { acceptChanges } from './commands/accept';
-import { CommentStatus, isValidStatus } from './types';
+import { CommentStatus, isValidStatus, isFileReviewData } from './types';
 
 export interface ParsedArgs {
   command: string;
@@ -65,9 +65,14 @@ export function runCli(argv: string[], cwd: string = process.cwd()): string {
 
     case 'fix': {
       const id = parseInt(args[0], 10);
+      if (isNaN(id)) throw new Error('Invalid comment ID');
       const commit = options.commit;
       const message = options.message;
-      if (isNaN(id)) throw new Error('Invalid comment ID');
+      const data = store.load();
+      if (isFileReviewData(data)) {
+        markFileCommentAsFixed(store, id, message);
+        return `Marked comment #${id} as fixed`;
+      }
       if (!commit) throw new Error('--commit required');
       markAsFixed(store, id, commit, message);
       return `Marked comment #${id} as fixed (${commit})`;

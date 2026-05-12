@@ -1,5 +1,5 @@
 import { ReviewStore } from '../store';
-import { Comment, CommentStatus } from '../types';
+import { Comment, CommentStatus, FileComment, isFileReviewData } from '../types';
 
 export interface ListOptions {
   status?: CommentStatus;
@@ -28,8 +28,31 @@ export function formatComment(comment: Comment): string {
   return lines.join('\n');
 }
 
+export function formatFileComment(comment: FileComment, filePath: string): string {
+  const lines: string[] = [];
+
+  const statusTag = `[${comment.status}]`;
+  const location = `${filePath}:${comment.line}`;
+
+  lines.push(`#${comment.id} ${statusTag} ${location}`);
+  lines.push(`   "${comment.text}"`);
+
+  return lines.join('\n');
+}
+
 export function listComments(store: ReviewStore, options: ListOptions = {}): string {
   const data = store.load();
+
+  if (isFileReviewData(data)) {
+    let comments = data.comments;
+    if (options.status) {
+      comments = comments.filter(c => c.status === options.status);
+    }
+    if (comments.length === 0) {
+      return 'No comments found.';
+    }
+    return comments.map(c => formatFileComment(c, data.filePath)).join('\n\n');
+  }
 
   let comments = data.comments;
 
