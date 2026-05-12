@@ -35,6 +35,12 @@
             <keyboard-shortcut keymap="$default" first-keystroke="F4"/>
             <add-to-group group-id="Diff.EditorPopupMenu" anchor="first"/>
         </action>
+        <action id="CodeReview.ReviewFile"
+                class="com.codereview.local.actions.ReviewFileAction"
+                text="Review File with Review Duet"
+                description="Start a single-file review with Review Duet">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
         <!-- TODO: Uncomment to enable "Mark Reviewed" button in diff toolbar
         <group id="CodeReview.DiffToolbarGroup">
             <separator/>
