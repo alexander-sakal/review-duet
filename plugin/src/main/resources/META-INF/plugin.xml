@@ -41,6 +41,8 @@
                 text="Review File with Review Duet"
                 description="Start a single-file review with Review Duet">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
         </action>
         <!-- TODO: Uncomment to enable "Mark Reviewed" button in diff toolbar
         <group id="CodeReview.DiffToolbarGroup">
