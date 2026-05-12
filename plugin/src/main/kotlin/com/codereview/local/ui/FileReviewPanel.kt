@@ -94,6 +94,43 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         add(accept)
     }
 
+    fun addComment(targetFile: Path, line: Int, text: String) {
+        val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
+        val data = review.loadOrInit()
+        val vfile = LocalFileSystem.getInstance().findFileByPath(targetFile.toString())
+        val doc = vfile?.let { FileDocumentManager.getInstance().getDocument(it) }
+        val lineText = doc?.let {
+            val idx = (line - 1).coerceIn(0, (it.lineCount - 1).coerceAtLeast(0))
+            it.getText(com.intellij.openapi.util.TextRange(it.getLineStartOffset(idx), it.getLineEndOffset(idx)))
+        } ?: ""
+        val contextBefore = doc?.let { sliceLines(it, line - 2, line - 1) } ?: emptyList()
+        val contextAfter = doc?.let { sliceLines(it, line, line + 1) } ?: emptyList()
+        data.comments.add(
+            FileComment(
+                id = data.getNextCommentId(),
+                line = line,
+                lineText = lineText,
+                contextBefore = contextBefore,
+                contextAfter = contextAfter,
+                text = text,
+                status = FileCommentStatus.OPEN,
+                createdAt = java.time.Instant.now().toString()
+            )
+        )
+        review.save(data)
+        openReview(targetFile)
+    }
+
+    private fun sliceLines(doc: com.intellij.openapi.editor.Document, fromLine: Int, toLine: Int): List<String> {
+        val result = mutableListOf<String>()
+        for (i in fromLine..toLine) {
+            if (i in 0 until doc.lineCount) {
+                result.add(doc.getText(com.intellij.openapi.util.TextRange(doc.getLineStartOffset(i), doc.getLineEndOffset(i))))
+            }
+        }
+        return result
+    }
+
     fun openReview(targetFile: Path) {
         if (!reviewsListModel.contains(targetFile)) reviewsListModel.addElement(targetFile)
         reviewsList.setSelectedValue(targetFile, true)

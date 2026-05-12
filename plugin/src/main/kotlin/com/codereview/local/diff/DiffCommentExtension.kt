@@ -3,7 +3,10 @@ package com.codereview.local.diff
 import com.codereview.local.model.Comment
 import com.codereview.local.model.CommentStatus
 import com.codereview.local.model.Review
+import com.codereview.local.services.FileReviewService
+import com.codereview.local.ui.FileReviewPanel
 import com.codereview.local.util.ReviewPanelRefresher
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
 import com.intellij.diff.FrameDiffTool
@@ -49,6 +52,7 @@ import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.KeyboardFocusManager
 import java.awt.event.KeyEvent
+import java.nio.file.Path
 import javax.swing.*
 
 class DiffCommentExtension : DiffExtension() {
@@ -1008,9 +1012,24 @@ class DiffCommentExtension : DiffExtension() {
         val submitAction = {
             val text = textArea.text.trim()
             if (text.isNotBlank()) {
-                review.addComment(filePath, line, text)
-                refreshCommentInlays(editor, filePath, review, commentInlays)
-                ReviewPanelRefresher.refresh(project)
+                val basePath = project.basePath
+                val absoluteTarget = if (basePath != null) Path.of(basePath, filePath) else null
+                val fileReviewStorage = absoluteTarget?.let {
+                    FileReviewService.getInstance(project).resolveStoragePath(it)
+                }
+                if (absoluteTarget != null && fileReviewStorage?.toFile()?.exists() == true) {
+                    // File review mode: write to the FileReview instead of the branch Review
+                    val panel = ToolWindowManager.getInstance(project)
+                        .getToolWindow("Review Duet Files")
+                        ?.contentManager?.contents?.firstOrNull()
+                        ?.component as? FileReviewPanel
+                    panel?.addComment(absoluteTarget, line, text)
+                } else {
+                    // Branch review mode: existing behavior
+                    review.addComment(filePath, line, text)
+                    refreshCommentInlays(editor, filePath, review, commentInlays)
+                    ReviewPanelRefresher.refresh(project)
+                }
             }
             onDismiss()
         }

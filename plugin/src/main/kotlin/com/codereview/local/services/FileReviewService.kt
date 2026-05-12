@@ -54,6 +54,16 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
         review.delete()
     }
 
+    /**
+     * Returns the storage path for a file review without creating anything.
+     * Returns null if the repo root cannot be determined.
+     */
+    fun resolveStoragePath(targetFile: Path): Path? {
+        val repoRoot = resolveRepoRoot(targetFile) ?: return null
+        val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
+        return repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")
+    }
+
     fun encodeRelativePath(path: String): String =
         path.replace("%", "%25").replace("/", "%2F")
 }
