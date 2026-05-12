@@ -21,7 +21,6 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.messages.MessageBusConnection
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import java.awt.BorderLayout
@@ -59,9 +58,37 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private val reviewTree = JTree(treeModel).apply {
         isRootVisible = false
         showsRootHandles = true
+        cellRenderer = object : com.intellij.ui.ColoredTreeCellRenderer() {
+            override fun customizeCellRenderer(
+                tree: javax.swing.JTree,
+                value: Any?,
+                selected: Boolean,
+                expanded: Boolean,
+                leaf: Boolean,
+                row: Int,
+                hasFocus: Boolean
+            ) {
+                val node = value as? DefaultMutableTreeNode ?: return
+                when (val obj = node.userObject) {
+                    is FileNode -> {
+                        val vfile = com.intellij.openapi.vfs.LocalFileSystem.getInstance()
+                            .findFileByPath(obj.targetFile.toString())
+                        icon = vfile?.let {
+                            com.intellij.openapi.fileTypes.FileTypeRegistry.getInstance()
+                                .getFileTypeByFile(it).icon
+                        } ?: com.intellij.icons.AllIcons.FileTypes.Any_type
+                        append(obj.toString())
+                    }
+                    is CommentNode -> {
+                        icon = com.intellij.icons.AllIcons.General.Note
+                        append(obj.toString())
+                    }
+                    else -> append(value?.toString() ?: "")
+                }
+            }
+        }
     }
 
-    private val headerLabel = JBLabel("No file review selected")
     private var current: Pair<FileReview, FileReviewData>? = null
     private var busConnection: MessageBusConnection? = null
     private val markersByCommentId = mutableMapOf<Int, RangeMarker>()
@@ -70,7 +97,6 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
 
     init {
         layout = BorderLayout()
-        add(buildHeader(), BorderLayout.NORTH)
         add(buildBody(), BorderLayout.CENTER)
         add(buildFooter(), BorderLayout.SOUTH)
 
@@ -85,6 +111,28 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             focusReview(targetFile)
         }
 
+        reviewTree.addMouseListener(object : java.awt.event.MouseAdapter() {
+            override fun mousePressed(e: java.awt.event.MouseEvent) = maybeShowPopup(e)
+            override fun mouseReleased(e: java.awt.event.MouseEvent) = maybeShowPopup(e)
+
+            private fun maybeShowPopup(e: java.awt.event.MouseEvent) {
+                if (!e.isPopupTrigger) return
+                val treePath = reviewTree.getPathForLocation(e.x, e.y) ?: return
+                val node = treePath.lastPathComponent as? DefaultMutableTreeNode ?: return
+                val fileNode = node.userObject as? FileNode ?: return
+                reviewTree.selectionPath = treePath
+                val menu = javax.swing.JPopupMenu()
+                menu.add(javax.swing.JMenuItem("Copy review file path").apply {
+                    addActionListener {
+                        val storagePath = fileNode.review.storageFile.toAbsolutePath().toString()
+                        val selection = java.awt.datatransfer.StringSelection(storagePath)
+                        java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+                    }
+                })
+                menu.show(reviewTree, e.x, e.y)
+            }
+        })
+
         busConnection = project.messageBus.connect().also { conn ->
             conn.subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
@@ -98,10 +146,6 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
                 }
             })
         }
-    }
-
-    private fun buildHeader(): JBPanel<*> = JBPanel<JBPanel<*>>(BorderLayout()).apply {
-        add(headerLabel, BorderLayout.CENTER)
     }
 
     private fun buildBody(): JBPanel<*> = JBPanel<JBPanel<*>>(BorderLayout()).apply {
@@ -147,7 +191,6 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         upsertFileNode(targetFile, review, data)
         selectFileNode(targetFile)
         current = review to data
-        headerLabel.text = "${targetFile.fileName}  (${data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
     }
 
     private fun sliceLines(doc: com.intellij.openapi.editor.Document, fromLine: Int, toLine: Int): List<String> {
@@ -182,7 +225,6 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         upsertFileNode(targetFile, review, data)
         current = review to data
         selectFileNode(targetFile)
-        headerLabel.text = "${targetFile.fileName}  (${data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
         attachMarkers(data)
     }
 
@@ -221,12 +263,14 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         val fn = node.userObject as FileNode
         detachMarkers()
         current = fn.review to fn.data
-        headerLabel.text = "${targetFile.fileName}  (${fn.data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
         attachMarkers(fn.data)
     }
 
     private fun renderError(message: String) {
-        headerLabel.text = message
+        com.intellij.notification.NotificationGroupManager.getInstance()
+            .getNotificationGroup("Review Duet")
+            .createNotification(message, com.intellij.notification.NotificationType.WARNING)
+            .notify(project)
     }
 
     private fun resolveAgent() = run {
@@ -272,7 +316,6 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             }
         }
         if (treeRoot.childCount == 0) {
-            headerLabel.text = "No file review selected"
             current = null
         } else {
             val first = treeRoot.getChildAt(0) as DefaultMutableTreeNode
