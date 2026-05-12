@@ -9,6 +9,10 @@ import com.codereview.local.model.FileCommentStatus
 import com.codereview.local.services.AgentProcessService
 import com.codereview.local.services.FileReviewService
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.RangeMarker
@@ -21,6 +25,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.messages.MessageBusConnection
+import com.intellij.ui.PopupHandler
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import java.awt.BorderLayout
@@ -111,27 +116,10 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             focusReview(targetFile)
         }
 
-        reviewTree.addMouseListener(object : java.awt.event.MouseAdapter() {
-            override fun mousePressed(e: java.awt.event.MouseEvent) = maybeShowPopup(e)
-            override fun mouseReleased(e: java.awt.event.MouseEvent) = maybeShowPopup(e)
-
-            private fun maybeShowPopup(e: java.awt.event.MouseEvent) {
-                if (!e.isPopupTrigger) return
-                val treePath = reviewTree.getPathForLocation(e.x, e.y) ?: return
-                val node = treePath.lastPathComponent as? DefaultMutableTreeNode ?: return
-                val fileNode = node.userObject as? FileNode ?: return
-                reviewTree.selectionPath = treePath
-                val menu = javax.swing.JPopupMenu()
-                menu.add(javax.swing.JMenuItem("Copy review file path").apply {
-                    addActionListener {
-                        val storagePath = fileNode.review.storageFile.toAbsolutePath().toString()
-                        val selection = java.awt.datatransfer.StringSelection(storagePath)
-                        java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
-                    }
-                })
-                menu.show(reviewTree, e.x, e.y)
-            }
-        })
+        val filePopupGroup = DefaultActionGroup().apply {
+            add(CopyReviewFilePathAction())
+        }
+        PopupHandler.installFollowingSelectionTreePopup(reviewTree, filePopupGroup, "ReviewDuetFilePopup")
 
         busConnection = project.messageBus.connect().also { conn ->
             conn.subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
@@ -404,5 +392,22 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         val (review, data) = current ?: return
         val target = Path.of(data.filePath)
         upsertFileNode(target, review, data)
+    }
+
+    private inner class CopyReviewFilePathAction : AnAction("Copy review file path") {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+        override fun update(e: AnActionEvent) {
+            val node = reviewTree.selectionPath?.lastPathComponent as? DefaultMutableTreeNode
+            e.presentation.isEnabledAndVisible = node?.userObject is FileNode
+        }
+
+        override fun actionPerformed(e: AnActionEvent) {
+            val node = reviewTree.selectionPath?.lastPathComponent as? DefaultMutableTreeNode ?: return
+            val fileNode = node.userObject as? FileNode ?: return
+            val path = fileNode.review.storageFile.toAbsolutePath().toString()
+            val selection = java.awt.datatransfer.StringSelection(path)
+            java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+        }
     }
 }
