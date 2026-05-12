@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { acceptChanges } from './accept';
 import { ReviewStore } from '../store';
+import { ReviewData, isFileReviewData } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -33,8 +34,9 @@ describe('acceptChanges', () => {
     const result = acceptChanges(store);
 
     const data = store.load();
-    expect(data.baseCommit).toBe('original-base-sha');
-    expect(data.reviewedFiles).toEqual([]);
+    if (isFileReviewData(data)) throw new Error('expected ReviewData');
+    expect((data as ReviewData).baseCommit).toBe('original-base-sha');
+    expect((data as ReviewData).reviewedFiles).toEqual([]);
     expect(result).toContain('Accepted changes');
   });
 

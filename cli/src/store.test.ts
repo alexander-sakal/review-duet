@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ReviewStore } from './store';
+import { ReviewData, isFileReviewData } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -32,7 +33,8 @@ describe('ReviewStore', () => {
       const loaded = store.load();
 
       expect(loaded.version).toBe(1);
-      expect(loaded.baseCommit).toBe('abc1234');
+      if (isFileReviewData(loaded)) throw new Error('expected ReviewData');
+      expect((loaded as ReviewData).baseCommit).toBe('abc1234');
     });
 
     it('should throw if no review file exists', () => {

@@ -33,7 +33,7 @@ export interface Comment {
 
 export interface ReviewData {
   version: number;
-  baseCommit?: string;
+  baseCommit: string;
   mode?: string;
   comments: Comment[];
   reviewedFiles?: string[];
