@@ -10,6 +10,10 @@ import com.codereview.local.services.FileReviewService
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.util.messages.MessageBusConnection
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBPanel
@@ -28,6 +32,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private val commentsList = JBList(commentsListModel)
     private val headerLabel = JBLabel("No file review selected")
     private var current: Pair<FileReview, FileReviewData>? = null
+    private var busConnection: MessageBusConnection? = null
 
     init {
         layout = BorderLayout()
@@ -38,6 +43,20 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         reviewsList.addListSelectionListener {
             val selected = reviewsList.selectedValue ?: return@addListSelectionListener
             showReview(selected)
+        }
+
+        busConnection = project.messageBus.connect().also { conn ->
+            conn.subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    val cur = current ?: return
+                    val watchedPath = Path.of(cur.second.filePath).toAbsolutePath().toString()
+                    if (events.any { it.path == watchedPath }) {
+                        ApplicationManager.getApplication().invokeLater {
+                            showReview(Path.of(cur.second.filePath))
+                        }
+                    }
+                }
+            })
         }
     }
 
