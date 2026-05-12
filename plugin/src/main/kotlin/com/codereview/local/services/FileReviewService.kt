@@ -4,6 +4,7 @@ import com.codereview.local.model.FileReview
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.Path as KPath
 
 @Service(Service.Level.PROJECT)
@@ -36,7 +37,7 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
             FileReviewService { repoRoot }
     }
 
-    private val reviews = mutableMapOf<Path, FileReview>()
+    private val reviews = ConcurrentHashMap<Path, FileReview>()
 
     fun openOrCreate(targetFile: Path): FileReview {
         reviews[targetFile]?.let { return it }
