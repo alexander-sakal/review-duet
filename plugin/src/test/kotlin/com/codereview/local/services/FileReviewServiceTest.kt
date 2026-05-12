@@ -37,7 +37,7 @@ class FileReviewServiceTest {
     }
 
     @Test
-    fun `storage path encodes path separators`(@TempDir tmp: Path) {
+    fun `storage path mirrors the source directory layout`(@TempDir tmp: Path) {
         val target = tmp.resolve("docs/sub/foo.md").also {
             it.parent.createDirectories()
             it.writeText("x")
@@ -46,14 +46,16 @@ class FileReviewServiceTest {
         val review = service.openOrCreate(target)
         review.loadOrInit()
 
-        val expected = tmp.resolve(".review-duet/files/docs%2Fsub%2Ffoo.md.json")
+        val expected = tmp.resolve(".review-duet/files/docs/sub/foo.md.json")
         assertTrue(expected.exists(), "expected $expected to exist")
     }
 
     @Test
-    fun `paths containing percent sign are escaped`(@TempDir tmp: Path) {
+    fun `target outside repo root throws`(@TempDir tmp: Path) {
+        val outside = tmp.parent.resolve("outside.md").apply { writeText("x") }
         val service = FileReviewService.standalone(repoRoot = tmp)
-        val encoded = service.encodeRelativePath("a%b/c.md")
-        assertEquals("a%25b%2Fc.md", encoded)
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException::class.java) {
+            service.openOrCreate(outside)
+        }
     }
 }

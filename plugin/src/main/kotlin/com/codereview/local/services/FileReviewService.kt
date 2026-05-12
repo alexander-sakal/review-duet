@@ -44,7 +44,10 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
         val repoRoot = resolveRepoRoot(targetFile)
             ?: throw IllegalStateException("No repo root for $targetFile")
         val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
-        val storage = repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")
+        if (relative.startsWith("..")) {
+            throw IllegalStateException("Target file $targetFile is outside repo root $repoRoot")
+        }
+        val storage = repoRoot.resolve(".review-duet/files").resolve("$relative.json")
         val review = FileReview(targetFile, storage)
         reviews[targetFile] = review
         return review
@@ -62,9 +65,7 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
     fun resolveStoragePath(targetFile: Path): Path? {
         val repoRoot = resolveRepoRoot(targetFile) ?: return null
         val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
-        return repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")
+        if (relative.startsWith("..")) return null
+        return repoRoot.resolve(".review-duet/files").resolve("$relative.json")
     }
-
-    fun encodeRelativePath(path: String): String =
-        path.replace("%", "%25").replace("/", "%2F")
 }
