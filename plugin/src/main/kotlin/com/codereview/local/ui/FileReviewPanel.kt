@@ -21,21 +21,45 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.messages.MessageBusConnection
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.nio.file.Path
-import javax.swing.DefaultListModel
 import javax.swing.JButton
+import javax.swing.JTree
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
 
 class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(BorderLayout()) {
 
-    private val reviewsListModel = DefaultListModel<Path>()
-    private val reviewsList = JBList(reviewsListModel)
-    private val commentsListModel = DefaultListModel<FileComment>()
-    private val commentsList = JBList(commentsListModel)
+    private data class FileNode(val targetFile: Path, val review: FileReview, val data: FileReviewData) {
+        override fun toString(): String {
+            val open = data.comments.count { it.status == FileCommentStatus.OPEN }
+            return "${targetFile.fileName}  ($open open)"
+        }
+    }
+
+    private data class CommentNode(val parentFile: Path, val comment: FileComment) {
+        override fun toString(): String {
+            val statusPrefix = when (comment.status) {
+                FileCommentStatus.OPEN -> ""
+                FileCommentStatus.FIXED -> "[fixed] "
+                FileCommentStatus.OUTDATED -> "[outdated] "
+            }
+            val snippet = if (comment.text.length > 40) comment.text.take(40) + "..." else comment.text
+            return "${statusPrefix}#${comment.id} line ${comment.line}: $snippet"
+        }
+    }
+
+    private val treeRoot = DefaultMutableTreeNode("root")
+    private val treeModel = DefaultTreeModel(treeRoot)
+    private val reviewTree = JTree(treeModel).apply {
+        isRootVisible = false
+        showsRootHandles = true
+    }
+
     private val headerLabel = JBLabel("No file review selected")
     private var current: Pair<FileReview, FileReviewData>? = null
     private var busConnection: MessageBusConnection? = null
@@ -49,9 +73,15 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         add(buildBody(), BorderLayout.CENTER)
         add(buildFooter(), BorderLayout.SOUTH)
 
-        reviewsList.addListSelectionListener {
-            val selected = reviewsList.selectedValue ?: return@addListSelectionListener
-            showReview(selected)
+        reviewTree.addTreeSelectionListener {
+            val path = reviewTree.selectionPath ?: return@addTreeSelectionListener
+            val node = path.lastPathComponent as? DefaultMutableTreeNode ?: return@addTreeSelectionListener
+            val targetFile = when (val obj = node.userObject) {
+                is FileNode -> obj.targetFile
+                is CommentNode -> obj.parentFile
+                else -> return@addTreeSelectionListener
+            }
+            focusReview(targetFile)
         }
 
         busConnection = project.messageBus.connect().also { conn ->
@@ -61,7 +91,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
                     val watchedPath = Path.of(cur.second.filePath).toAbsolutePath().toString()
                     if (events.any { it.path == watchedPath }) {
                         ApplicationManager.getApplication().invokeLater {
-                            showReview(Path.of(cur.second.filePath))
+                            openReview(Path.of(cur.second.filePath))
                         }
                     }
                 }
@@ -74,13 +104,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     private fun buildBody(): JBPanel<*> = JBPanel<JBPanel<*>>(BorderLayout()).apply {
-        val split = javax.swing.JSplitPane(
-            javax.swing.JSplitPane.HORIZONTAL_SPLIT,
-            JBScrollPane(reviewsList),
-            JBScrollPane(commentsList)
-        )
-        split.dividerLocation = 200
-        add(split, BorderLayout.CENTER)
+        add(JBScrollPane(reviewTree), BorderLayout.CENTER)
     }
 
     private fun buildFooter(): JBPanel<*> = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.RIGHT)).apply {
@@ -118,7 +142,10 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             )
         )
         review.save(data)
-        openReview(targetFile)
+        upsertFileNode(targetFile, review, data)
+        selectFileNode(targetFile)
+        current = review to data
+        headerLabel.text = "${targetFile.fileName}  (${data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
     }
 
     private fun sliceLines(doc: com.intellij.openapi.editor.Document, fromLine: Int, toLine: Int): List<String> {
@@ -132,20 +159,17 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     fun openReview(targetFile: Path) {
-        if (!reviewsListModel.contains(targetFile)) reviewsListModel.addElement(targetFile)
-        reviewsList.setSelectedValue(targetFile, true)
-        showReview(targetFile)
-    }
-
-    private fun showReview(targetFile: Path) {
-        detachMarkers()
         if (!targetFile.toFile().exists()) {
             val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
             val data = try { review.loadOrInit() } catch (_: Exception) { null }
-            if (data != null) current = review to data
+            if (data != null) {
+                upsertFileNode(targetFile, review, data)
+                current = review to data
+            }
             renderError("File no longer exists: ${targetFile.fileName}. Use Accept & close to discard.")
             return
         }
+        detachMarkers()
         val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
         val data = try {
             review.refresh(review.loadOrInit())
@@ -153,16 +177,54 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             renderError("Could not load review for ${targetFile.fileName}: ${e.message}")
             return
         }
+        upsertFileNode(targetFile, review, data)
         current = review to data
+        selectFileNode(targetFile)
         headerLabel.text = "${targetFile.fileName}  (${data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
-        commentsListModel.clear()
-        data.comments.forEach { commentsListModel.addElement(it) }
         attachMarkers(data)
+    }
+
+    private fun upsertFileNode(targetFile: Path, review: FileReview, data: FileReviewData) {
+        val existingIdx = (0 until treeRoot.childCount).firstOrNull { i ->
+            val n = treeRoot.getChildAt(i) as DefaultMutableTreeNode
+            (n.userObject as? FileNode)?.targetFile == targetFile
+        }
+        val node = DefaultMutableTreeNode(FileNode(targetFile, review, data))
+        data.comments.forEach { c ->
+            node.add(DefaultMutableTreeNode(CommentNode(targetFile, c)))
+        }
+        if (existingIdx != null) {
+            treeModel.removeNodeFromParent(treeRoot.getChildAt(existingIdx) as DefaultMutableTreeNode)
+            treeModel.insertNodeInto(node, treeRoot, existingIdx)
+        } else {
+            treeModel.insertNodeInto(node, treeRoot, treeRoot.childCount)
+        }
+        reviewTree.expandPath(TreePath(node.path))
+    }
+
+    private fun selectFileNode(targetFile: Path) {
+        for (i in 0 until treeRoot.childCount) {
+            val n = treeRoot.getChildAt(i) as DefaultMutableTreeNode
+            if ((n.userObject as? FileNode)?.targetFile == targetFile) {
+                reviewTree.selectionPath = TreePath(n.path)
+                return
+            }
+        }
+    }
+
+    private fun focusReview(targetFile: Path) {
+        val node = (0 until treeRoot.childCount).asSequence()
+            .map { treeRoot.getChildAt(it) as DefaultMutableTreeNode }
+            .firstOrNull { (it.userObject as? FileNode)?.targetFile == targetFile } ?: return
+        val fn = node.userObject as FileNode
+        detachMarkers()
+        current = fn.review to fn.data
+        headerLabel.text = "${targetFile.fileName}  (${fn.data.comments.count { it.status == FileCommentStatus.OPEN }} open)"
+        attachMarkers(fn.data)
     }
 
     private fun renderError(message: String) {
         headerLabel.text = message
-        commentsListModel.clear()
     }
 
     private fun resolveAgent() = run {
@@ -188,7 +250,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             skillFolder = "review-duet:process-file",
             onFinished = {
                 ApplicationManager.getApplication().invokeLater {
-                    showReview(Path.of(data.filePath))
+                    openReview(Path.of(data.filePath))
                 }
             }
         )
@@ -197,12 +259,25 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private fun onAcceptAndClose() {
         detachMarkers()
         val (review, data) = current ?: return
-        FileReviewService.getInstance(project).close(Path.of(data.filePath))
         val target = Path.of(data.filePath)
-        reviewsListModel.removeElement(target)
-        commentsListModel.clear()
-        headerLabel.text = "No file review selected"
-        current = null
+        FileReviewService.getInstance(project).close(target)
+        for (i in 0 until treeRoot.childCount) {
+            val n = treeRoot.getChildAt(i) as DefaultMutableTreeNode
+            if ((n.userObject as? FileNode)?.targetFile == target) {
+                treeModel.removeNodeFromParent(n)
+                break
+            }
+        }
+        if (treeRoot.childCount == 0) {
+            headerLabel.text = "No file review selected"
+            current = null
+        } else {
+            val first = treeRoot.getChildAt(0) as DefaultMutableTreeNode
+            val firstFile = (first.userObject as FileNode).targetFile
+            current = null
+            focusReview(firstFile)
+            selectFileNode(firstFile)
+        }
     }
 
     private fun attachMarkers(data: FileReviewData) {
@@ -251,9 +326,14 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         if (changed) {
             current?.first?.save(data)
             ApplicationManager.getApplication().invokeLater {
-                commentsListModel.clear()
-                data.comments.forEach { commentsListModel.addElement(it) }
+                refreshCommentsForCurrent()
             }
         }
+    }
+
+    private fun refreshCommentsForCurrent() {
+        val (review, data) = current ?: return
+        val target = Path.of(data.filePath)
+        upsertFileNode(target, review, data)
     }
 }
