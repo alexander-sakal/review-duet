@@ -1,0 +1,62 @@
+package com.codereview.local.services
+
+import com.codereview.local.model.FileComment
+import com.codereview.local.model.FileCommentStatus
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.*
+
+class CommentAnchorResolverTest {
+
+    private val resolver = CommentAnchorResolver()
+
+    private fun comment(line: Int, lineText: String,
+                        before: List<String> = emptyList(),
+                        after: List<String> = emptyList()) = FileComment(
+        id = 1, line = line, lineText = lineText,
+        contextBefore = before, contextAfter = after,
+        text = "comment", status = FileCommentStatus.OPEN, createdAt = "t"
+    )
+
+    @Test
+    fun `unchanged file leaves comment at its original line`() {
+        val current = listOf("a", "b", "## Auth", "c")
+        val c = comment(line = 3, lineText = "## Auth")
+        val result = resolver.resolve(c, current)
+        assertEquals(3, result.line)
+        assertEquals(FileCommentStatus.OPEN, result.status)
+    }
+
+    @Test
+    fun `lineText found at a different line re-anchors and stays OPEN`() {
+        val current = listOf("inserted", "a", "b", "## Auth", "c")
+        val c = comment(line = 3, lineText = "## Auth")
+        val result = resolver.resolve(c, current)
+        assertEquals(4, result.line)
+        assertEquals(FileCommentStatus.OPEN, result.status)
+    }
+
+    @Test
+    fun `multiple matches disambiguated by contextBefore`() {
+        val current = listOf("first", "header", "second", "header", "third")
+        val c = comment(line = 2, lineText = "header", before = listOf("first"))
+        val result = resolver.resolve(c, current)
+        assertEquals(2, result.line)
+    }
+
+    @Test
+    fun `no match marks comment OUTDATED and keeps original line`() {
+        val current = listOf("a", "b", "c")
+        val c = comment(line = 3, lineText = "## Auth")
+        val result = resolver.resolve(c, current)
+        assertEquals(3, result.line)
+        assertEquals(FileCommentStatus.OUTDATED, result.status)
+    }
+
+    @Test
+    fun `ambiguous matches with no resolving context mark OUTDATED`() {
+        val current = listOf("dup", "dup", "dup")
+        val c = comment(line = 2, lineText = "dup")
+        val result = resolver.resolve(c, current)
+        assertEquals(FileCommentStatus.OUTDATED, result.status)
+    }
+}
