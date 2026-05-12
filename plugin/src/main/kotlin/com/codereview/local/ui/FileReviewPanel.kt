@@ -99,6 +99,8 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     private val markersByCommentId = mutableMapOf<Int, RangeMarker>()
     private var trackedDocument: Document? = null
     private var documentListener: DocumentListener? = null
+    private val saveAlarm = com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.POOLED_THREAD, project)
+    private val saveDelayMs = 500
 
     init {
         layout = BorderLayout()
@@ -172,6 +174,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
                 createdAt = java.time.Instant.now().toString()
             )
         )
+        saveAlarm.cancelAllRequests()
         review.save(data)
         FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
         upsertFileNode(targetFile, review, data)
@@ -185,6 +188,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         val idx = data.comments.indexOfFirst { it.id == commentId }
         if (idx < 0) return
         data.comments[idx] = data.comments[idx].copy(text = newText)
+        saveAlarm.cancelAllRequests()
         review.save(data)
         FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
         upsertFileNode(targetFile, review, data)
@@ -195,6 +199,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
         val review = FileReviewService.getInstance(project).openOrCreate(targetFile)
         val data = review.loadOrInit()
         data.comments.removeAll { it.id == commentId }
+        saveAlarm.cancelAllRequests()
         review.save(data)
         FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
         upsertFileNode(targetFile, review, data)
@@ -297,6 +302,8 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
             )
             return
         }
+        saveAlarm.cancelAllRequests()
+        review.save(data)
         AgentProcessService.getInstance(project).runProcess(
             workingDir = project.basePath ?: return,
             reviewFilePath = review.storageFile.toString(),
@@ -312,6 +319,7 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     internal fun closeReview(targetFile: Path) {
+        saveAlarm.cancelAllRequests()
         detachMarkers()
         val current = this.current
         val (review, data) = if (current != null && Path.of(current.second.filePath) == targetFile) {
@@ -372,29 +380,48 @@ class FileReviewPanel(private val project: Project) : JBPanel<FileReviewPanel>(B
     }
 
     private fun persistMarkers(data: FileReviewData, doc: Document) {
-        var changed = false
+        var changedAny = false
+        val changedNodeIndices = mutableListOf<Int>()
         data.comments.forEachIndexed { idx, c ->
             val m = markersByCommentId[c.id] ?: return@forEachIndexed
             if (!m.isValid) return@forEachIndexed
             val newLine = doc.getLineNumber(m.startOffset) + 1
             if (newLine != c.line) {
                 data.comments[idx] = c.copy(line = newLine)
-                changed = true
+                changedAny = true
+                changedNodeIndices.add(idx)
             }
         }
-        if (changed) {
-            current?.first?.save(data)
-            ApplicationManager.getApplication().invokeLater {
-                refreshCommentsForCurrent()
-                FileReviewEditorCommentExtension.refreshInlaysForFile(project, Path.of(data.filePath))
+        if (!changedAny) return
+
+        // Update tree comment-node objects in place — preserves expansion/selection state.
+        val (review, _) = current ?: return
+        val targetFile = Path.of(data.filePath)
+        val fileNode = findFileNode(targetFile)
+        if (fileNode != null) {
+            changedNodeIndices.forEach { idx ->
+                if (idx >= fileNode.childCount) return@forEach
+                val commentNode = fileNode.getChildAt(idx) as javax.swing.tree.DefaultMutableTreeNode
+                commentNode.userObject = CommentNode(targetFile, data.comments[idx])
+                treeModel.nodeChanged(commentNode)
             }
         }
+
+        FileReviewEditorCommentExtension.refreshInlaysForFile(project, targetFile)
+
+        // Schedule disk save on pooled thread, debounced to saveDelayMs.
+        saveAlarm.cancelAllRequests()
+        saveAlarm.addRequest({
+            review.save(data)
+        }, saveDelayMs)
     }
 
-    private fun refreshCommentsForCurrent() {
-        val (review, data) = current ?: return
-        val target = Path.of(data.filePath)
-        upsertFileNode(target, review, data)
+    private fun findFileNode(targetFile: Path): javax.swing.tree.DefaultMutableTreeNode? {
+        for (i in 0 until treeRoot.childCount) {
+            val n = treeRoot.getChildAt(i) as javax.swing.tree.DefaultMutableTreeNode
+            if ((n.userObject as? FileNode)?.targetFile == targetFile) return n
+        }
+        return null
     }
 
     private inner class CopyReviewFilePathAction : AnAction("Copy review file path") {
