@@ -55,10 +55,207 @@ import javax.swing.SwingUtilities
 class FileReviewEditorCommentExtension : EditorFactoryListener {
 
     companion object {
-        private val STATE_KEY = Key.create<EditorState>("FileReviewEditorCommentExtension.state")
+        internal val STATE_KEY = Key.create<EditorState>("FileReviewEditorCommentExtension.state")
+
+        /**
+         * Installs the gutter "+" affordance on [editor] for the given [project].
+         *
+         * Idempotent: if the affordance is already installed (STATE_KEY is set), returns immediately.
+         * Safe to call from outside [editorCreated] — e.g. retroactively when a new review is created
+         * while the editor is already open.
+         */
+        internal fun install(editor: Editor, project: Project) {
+            if (editor.getUserData(STATE_KEY) != null) return
+            val vfile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
+            val targetFile = Path.of(vfile.path)
+            installGutterAffordance(editor, project, targetFile)
+        }
+
+        private fun installGutterAffordance(editor: Editor, project: Project, targetFile: Path) {
+            val state = EditorState(
+                motionListener = object : EditorMouseMotionListener {
+                    override fun mouseMoved(e: EditorMouseEvent) {
+                        val editorState = editor.getUserData(STATE_KEY) ?: return
+                        val line = e.logicalPosition.line
+
+                        if (line != editorState.currentLine) {
+                            editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                            editorState.currentHighlighter = null
+                            editorState.currentLine = -1
+                        }
+
+                        if (line != editorState.currentLine && line >= 0 && line < editor.document.lineCount) {
+                            editorState.currentLine = line
+                            val startOffset = editor.document.getLineStartOffset(line)
+                            val endOffset = editor.document.getLineEndOffset(line)
+
+                            editorState.currentHighlighter = editor.markupModel.addRangeHighlighter(
+                                startOffset,
+                                endOffset,
+                                HighlighterLayer.LAST,
+                                null,
+                                HighlighterTargetArea.LINES_IN_RANGE
+                            ).apply {
+                                gutterIconRenderer = AddCommentGutterIcon(editor, project, targetFile, line + 1)
+                            }
+                        }
+                    }
+                },
+                mouseListener = object : EditorMouseListener {
+                    override fun mouseExited(e: EditorMouseEvent) {
+                        val editorState = editor.getUserData(STATE_KEY) ?: return
+                        editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
+                        editorState.currentHighlighter = null
+                        editorState.currentLine = -1
+                    }
+                }
+            )
+
+            editor.putUserData(STATE_KEY, state)
+            editor.addEditorMouseMotionListener(state.motionListener)
+            editor.addEditorMouseListener(state.mouseListener)
+        }
+
+        private fun showInlineCommentForm(editor: Editor, project: Project, targetFile: Path, line: Int) {
+            val editorImpl = editor as? EditorImpl ?: return
+            val offset = editor.document.getLineEndOffset(line - 1)
+
+            var formInlay: Inlay<*>? = null
+            val onDismiss = {
+                formInlay?.dispose()
+                Unit
+            }
+
+            val formPanel = createNewCommentPanel(editor, project, targetFile, line, onDismiss)
+            val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
+
+            val properties = EditorEmbeddedComponentManager.Properties(
+                EditorEmbeddedComponentManager.ResizePolicy.none(),
+                null,
+                false,
+                false,
+                100,
+                offset
+            )
+
+            formInlay = EditorEmbeddedComponentManager.getInstance()
+                .addComponent(editorImpl, wrappedPanel, properties)
+        }
+
+        private fun createNewCommentPanel(
+            editor: Editor,
+            project: Project,
+            targetFile: Path,
+            line: Int,
+            onDismiss: () -> Unit
+        ): JComponent {
+            val colorsScheme = EditorColorsManager.getInstance().globalScheme
+            val bgColor = colorsScheme.defaultBackground
+            val fgColor = colorsScheme.defaultForeground
+            val borderColor = colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: JBColor.border()
+
+            val panel = JPanel(BorderLayout()).apply {
+                isOpaque = true
+                background = bgColor
+                cursor = Cursor.getDefaultCursor()
+                border = BorderFactory.createCompoundBorder(
+                    RoundedLineBorder(borderColor, 8, 1),
+                    JBUI.Borders.empty(8)
+                )
+            }
+
+            val textArea = JBTextArea().apply {
+                rows = 2
+                lineWrap = true
+                wrapStyleWord = true
+                isEditable = true
+                background = UIUtil.getTextFieldBackground()
+                foreground = fgColor
+                caretColor = fgColor
+                border = JBUI.Borders.empty(6)
+            }
+
+            val scrollPane = JBScrollPane(textArea).apply {
+                border = JBUI.Borders.customLine(JBColor.border(), 1)
+            }
+
+            val bottomPanel = JPanel(BorderLayout()).apply {
+                isOpaque = false
+                cursor = Cursor.getDefaultCursor()
+                border = JBUI.Borders.emptyTop(8)
+            }
+
+            val hintLabel = JBLabel("Ctrl+Enter to submit").apply {
+                foreground = UIUtil.getContextHelpForeground()
+                font = JBFont.small()
+            }
+
+            val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
+                isOpaque = false
+                cursor = Cursor.getDefaultCursor()
+            }
+
+            val submitAction = {
+                val text = textArea.text.trim()
+                if (text.isNotBlank()) {
+                    val panel = ToolWindowManager.getInstance(project)
+                        .getToolWindow("Review Duet Files")
+                        ?.contentManager?.contents?.firstOrNull()
+                        ?.component as? FileReviewPanel
+                    if (panel != null) {
+                        panel.addComment(targetFile, line, text)
+                    } else {
+                        Messages.showInfoMessage(
+                            project,
+                            "Open the file via \"Review File with Review Duet\" first to add comments.",
+                            "Review Duet Files panel not open"
+                        )
+                    }
+                }
+                onDismiss()
+            }
+
+            buttonPanel.add(JButton("Cancel").apply {
+                isContentAreaFilled = false
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                addActionListener { onDismiss() }
+            })
+
+            buttonPanel.add(JButton("Add Comment").apply {
+                isContentAreaFilled = false
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                addActionListener { submitAction() }
+            })
+
+            bottomPanel.add(hintLabel, BorderLayout.WEST)
+            bottomPanel.add(buttonPanel, BorderLayout.EAST)
+
+            panel.add(scrollPane, BorderLayout.CENTER)
+            panel.add(bottomPanel, BorderLayout.SOUTH)
+
+            textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("control ENTER"), "submit")
+            textArea.actionMap.put("submit", object : AbstractAction() {
+                override fun actionPerformed(e: java.awt.event.ActionEvent?) { submitAction() }
+            })
+
+            textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "cancel")
+            textArea.actionMap.put("cancel", object : AbstractAction() {
+                override fun actionPerformed(e: java.awt.event.ActionEvent?) { onDismiss() }
+            })
+
+            SwingUtilities.invokeLater { textArea.requestFocusInWindow() }
+
+            val outerPanel = JPanel(BorderLayout()).apply {
+                isOpaque = false
+                cursor = Cursor.getDefaultCursor()
+                border = JBUI.Borders.empty(4, 8, 4, 8)
+                add(panel, BorderLayout.CENTER)
+            }
+            return DiffCommentExtension.wrapForFocusIsolation(outerPanel)
+        }
     }
 
-    private class EditorState(
+    internal class EditorState(
         val motionListener: EditorMouseMotionListener,
         val mouseListener: EditorMouseListener,
         var currentHighlighter: RangeHighlighter? = null,
@@ -79,7 +276,7 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         val storagePath = FileReviewService.getInstance(project).resolveStoragePath(targetFile) ?: return
         if (!storagePath.toFile().exists()) return
 
-        installGutterAffordance(editor, project, targetFile)
+        install(editor, project)
     }
 
     override fun editorReleased(event: EditorFactoryEvent) {
@@ -92,190 +289,7 @@ class FileReviewEditorCommentExtension : EditorFactoryListener {
         editor.putUserData(STATE_KEY, null)
     }
 
-    private fun installGutterAffordance(editor: Editor, project: Project, targetFile: Path) {
-        val state = EditorState(
-            motionListener = object : EditorMouseMotionListener {
-                override fun mouseMoved(e: EditorMouseEvent) {
-                    val editorState = editor.getUserData(STATE_KEY) ?: return
-                    val line = e.logicalPosition.line
-
-                    if (line != editorState.currentLine) {
-                        editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
-                        editorState.currentHighlighter = null
-                        editorState.currentLine = -1
-                    }
-
-                    if (line != editorState.currentLine && line >= 0 && line < editor.document.lineCount) {
-                        editorState.currentLine = line
-                        val startOffset = editor.document.getLineStartOffset(line)
-                        val endOffset = editor.document.getLineEndOffset(line)
-
-                        editorState.currentHighlighter = editor.markupModel.addRangeHighlighter(
-                            startOffset,
-                            endOffset,
-                            HighlighterLayer.LAST,
-                            null,
-                            HighlighterTargetArea.LINES_IN_RANGE
-                        ).apply {
-                            gutterIconRenderer = AddCommentGutterIcon(editor, project, targetFile, line + 1)
-                        }
-                    }
-                }
-            },
-            mouseListener = object : EditorMouseListener {
-                override fun mouseExited(e: EditorMouseEvent) {
-                    val editorState = editor.getUserData(STATE_KEY) ?: return
-                    editorState.currentHighlighter?.let { editor.markupModel.removeHighlighter(it) }
-                    editorState.currentHighlighter = null
-                    editorState.currentLine = -1
-                }
-            }
-        )
-
-        editor.putUserData(STATE_KEY, state)
-        editor.addEditorMouseMotionListener(state.motionListener)
-        editor.addEditorMouseListener(state.mouseListener)
-    }
-
-    private fun showInlineCommentForm(editor: Editor, project: Project, targetFile: Path, line: Int) {
-        val editorImpl = editor as? EditorImpl ?: return
-        val offset = editor.document.getLineEndOffset(line - 1)
-
-        var formInlay: Inlay<*>? = null
-        val onDismiss = {
-            formInlay?.dispose()
-            Unit
-        }
-
-        val formPanel = createNewCommentPanel(editor, project, targetFile, line, onDismiss)
-        val wrappedPanel = EditorWidthPanel(editorImpl, formPanel)
-
-        val properties = EditorEmbeddedComponentManager.Properties(
-            EditorEmbeddedComponentManager.ResizePolicy.none(),
-            null,
-            false,
-            false,
-            100,
-            offset
-        )
-
-        formInlay = EditorEmbeddedComponentManager.getInstance()
-            .addComponent(editorImpl, wrappedPanel, properties)
-    }
-
-    private fun createNewCommentPanel(
-        editor: Editor,
-        project: Project,
-        targetFile: Path,
-        line: Int,
-        onDismiss: () -> Unit
-    ): JComponent {
-        val colorsScheme = EditorColorsManager.getInstance().globalScheme
-        val bgColor = colorsScheme.defaultBackground
-        val fgColor = colorsScheme.defaultForeground
-        val borderColor = colorsScheme.getColor(EditorColors.TEARLINE_COLOR) ?: JBColor.border()
-
-        val panel = JPanel(BorderLayout()).apply {
-            isOpaque = true
-            background = bgColor
-            cursor = Cursor.getDefaultCursor()
-            border = BorderFactory.createCompoundBorder(
-                RoundedLineBorder(borderColor, 8, 1),
-                JBUI.Borders.empty(8)
-            )
-        }
-
-        val textArea = JBTextArea().apply {
-            rows = 2
-            lineWrap = true
-            wrapStyleWord = true
-            isEditable = true
-            background = UIUtil.getTextFieldBackground()
-            foreground = fgColor
-            caretColor = fgColor
-            border = JBUI.Borders.empty(6)
-        }
-
-        val scrollPane = JBScrollPane(textArea).apply {
-            border = JBUI.Borders.customLine(JBColor.border(), 1)
-        }
-
-        val bottomPanel = JPanel(BorderLayout()).apply {
-            isOpaque = false
-            cursor = Cursor.getDefaultCursor()
-            border = JBUI.Borders.emptyTop(8)
-        }
-
-        val hintLabel = JBLabel("Ctrl+Enter to submit").apply {
-            foreground = UIUtil.getContextHelpForeground()
-            font = JBFont.small()
-        }
-
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
-            isOpaque = false
-            cursor = Cursor.getDefaultCursor()
-        }
-
-        val submitAction = {
-            val text = textArea.text.trim()
-            if (text.isNotBlank()) {
-                val panel = ToolWindowManager.getInstance(project)
-                    .getToolWindow("Review Duet Files")
-                    ?.contentManager?.contents?.firstOrNull()
-                    ?.component as? FileReviewPanel
-                if (panel != null) {
-                    panel.addComment(targetFile, line, text)
-                } else {
-                    Messages.showInfoMessage(
-                        project,
-                        "Open the file via \"Review File with Review Duet\" first to add comments.",
-                        "Review Duet Files panel not open"
-                    )
-                }
-            }
-            onDismiss()
-        }
-
-        buttonPanel.add(JButton("Cancel").apply {
-            isContentAreaFilled = false
-            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            addActionListener { onDismiss() }
-        })
-
-        buttonPanel.add(JButton("Add Comment").apply {
-            isContentAreaFilled = false
-            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            addActionListener { submitAction() }
-        })
-
-        bottomPanel.add(hintLabel, BorderLayout.WEST)
-        bottomPanel.add(buttonPanel, BorderLayout.EAST)
-
-        panel.add(scrollPane, BorderLayout.CENTER)
-        panel.add(bottomPanel, BorderLayout.SOUTH)
-
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("control ENTER"), "submit")
-        textArea.actionMap.put("submit", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) { submitAction() }
-        })
-
-        textArea.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "cancel")
-        textArea.actionMap.put("cancel", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) { onDismiss() }
-        })
-
-        SwingUtilities.invokeLater { textArea.requestFocusInWindow() }
-
-        val outerPanel = JPanel(BorderLayout()).apply {
-            isOpaque = false
-            cursor = Cursor.getDefaultCursor()
-            border = JBUI.Borders.empty(4, 8, 4, 8)
-            add(panel, BorderLayout.CENTER)
-        }
-        return DiffCommentExtension.wrapForFocusIsolation(outerPanel)
-    }
-
-    private inner class AddCommentGutterIcon(
+    private class AddCommentGutterIcon(
         private val editor: Editor,
         private val project: Project,
         private val targetFile: Path,
