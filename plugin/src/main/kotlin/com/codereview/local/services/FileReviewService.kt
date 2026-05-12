@@ -41,10 +41,19 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
     }
 
     private val reviews = ConcurrentHashMap<Path, FileReview>()
+    private val rootCache = ConcurrentHashMap<Path, Path>()
+
+    private fun cachedResolveRepoRoot(targetFile: Path): Path? {
+        val parent = targetFile.parent ?: return resolveRepoRoot(targetFile)
+        rootCache[parent]?.let { return it }
+        val resolved = resolveRepoRoot(targetFile) ?: return null
+        rootCache[parent] = resolved
+        return resolved
+    }
 
     fun openOrCreate(targetFile: Path): FileReview {
         reviews[targetFile]?.let { return it }
-        val repoRoot = resolveRepoRoot(targetFile)
+        val repoRoot = cachedResolveRepoRoot(targetFile)
             ?: throw IllegalStateException("No repo root for $targetFile")
         val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
         if (relative.startsWith("..")) {
@@ -66,7 +75,7 @@ class FileReviewService private constructor(private val resolveRepoRoot: (Path) 
      * Returns null if the repo root cannot be determined.
      */
     fun resolveStoragePath(targetFile: Path): Path? {
-        val repoRoot = resolveRepoRoot(targetFile) ?: return null
+        val repoRoot = cachedResolveRepoRoot(targetFile) ?: return null
         val relative = repoRoot.relativize(targetFile).toString().replace('\\', '/')
         if (relative.startsWith("..")) return null
         return repoRoot.resolve(".review-duet/files").resolve("${encodeRelativePath(relative)}.json")

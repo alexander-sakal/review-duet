@@ -65,4 +65,19 @@ class FileReviewServiceTest {
             service.openOrCreate(outside)
         }
     }
+
+    @Test
+    fun `repo root cache reuses resolved root across siblings`(@TempDir tmp: Path) {
+        val a = tmp.resolve("docs/a.md").also { it.parent.createDirectories(); it.writeText("x") }
+        val b = tmp.resolve("docs/b.md").also { it.writeText("x") }
+        val service = FileReviewService.standalone(repoRoot = tmp)
+
+        service.openOrCreate(a).loadOrInit()
+        service.openOrCreate(b).loadOrInit()
+
+        // Both should resolve to the same root; we don't have a direct hook to assert the cache hit,
+        // so just confirm both reviews end up under .review-duet/files/ as expected:
+        assertTrue(tmp.resolve(".review-duet/files/docs%2Fa.md.json").exists())
+        assertTrue(tmp.resolve(".review-duet/files/docs%2Fb.md.json").exists())
+    }
 }
