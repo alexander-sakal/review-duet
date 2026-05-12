@@ -46,7 +46,7 @@ class FileReview(
         if (currentHash == data.lastSeenHash) return data
 
         val currentLines = targetFile.readText().lines()
-        val updated = data.comments.map { resolver.resolve(it, currentLines) }
+        val updated = resolver.resolveAll(data.comments, currentLines)
         data.comments.clear()
         data.comments.addAll(updated)
         data.lastSeenHash = currentHash

@@ -69,4 +69,18 @@ class CommentAnchorResolverTest {
         val result = resolver.resolve(c, current)
         assertEquals(FileCommentStatus.OUTDATED, result.status)
     }
+
+    @Test
+    fun `resolveAll re-anchors multiple comments in one pass`() {
+        val current = listOf("inserted", "a", "## Auth", "b", "## API")
+        val comments = listOf(
+            FileComment(1, 2, "## Auth", emptyList(), emptyList(), "x", FileCommentStatus.OPEN, "t"),
+            FileComment(2, 4, "## API",  emptyList(), emptyList(), "y", FileCommentStatus.OPEN, "t")
+        )
+        val result = resolver.resolveAll(comments, current)
+        assertEquals(3, result[0].line)
+        assertEquals(5, result[1].line)
+        assertEquals(FileCommentStatus.OPEN, result[0].status)
+        assertEquals(FileCommentStatus.OPEN, result[1].status)
+    }
 }

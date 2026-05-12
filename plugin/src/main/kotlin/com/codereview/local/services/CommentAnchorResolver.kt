@@ -5,27 +5,43 @@ import com.codereview.local.model.FileCommentStatus
 
 class CommentAnchorResolver {
 
-    /**
-     * Re-anchor a comment against the current file lines.
-     * Returns a new FileComment with updated line and possibly status.
-     */
+    /** Build a map from lineText to the (0-based) indices where it occurs in [currentLines]. */
+    fun buildIndex(currentLines: List<String>): Map<String, List<Int>> {
+        val index = mutableMapOf<String, MutableList<Int>>()
+        currentLines.forEachIndexed { i, line ->
+            index.getOrPut(line) { mutableListOf() }.add(i)
+        }
+        return index
+    }
+
+    /** Re-anchor every comment in one pass using a precomputed line index. */
+    fun resolveAll(comments: List<FileComment>, currentLines: List<String>): List<FileComment> {
+        val index = buildIndex(currentLines)
+        return comments.map { resolveWithIndex(it, currentLines, index) }
+    }
+
+    /** Re-anchor a single comment against the current file lines. */
     fun resolve(comment: FileComment, currentLines: List<String>): FileComment {
-        val matchingIndices = currentLines.withIndex()
-            .filter { it.value == comment.lineText }
-            .map { it.index }
+        return resolveWithIndex(comment, currentLines, buildIndex(currentLines))
+    }
+
+    private fun resolveWithIndex(
+        comment: FileComment,
+        currentLines: List<String>,
+        index: Map<String, List<Int>>
+    ): FileComment {
+        val matchingIndices = index[comment.lineText] ?: emptyList()
 
         if (matchingIndices.isEmpty()) {
             return comment.copy(status = FileCommentStatus.OUTDATED)
         }
-
         if (matchingIndices.size == 1) {
             return comment.copy(line = matchingIndices[0] + 1)
         }
-
+        // multiple matches: use context
         val disambiguated = matchingIndices.singleOrNull { idx ->
             contextMatches(currentLines, idx, comment.contextBefore, comment.contextAfter)
         }
-
         return if (disambiguated != null) {
             comment.copy(line = disambiguated + 1)
         } else {
