@@ -1,7 +1,5 @@
 package com.codereview.local.services
 
-import com.codereview.local.model.ChangeType
-import com.codereview.local.model.ChangedFile
 import com.codereview.local.model.CommitInfo
 import com.intellij.openapi.project.Project
 import git4idea.repo.GitRepositoryManager
@@ -88,10 +86,6 @@ class GitService(val projectRoot: Path) {
         return result?.trim()?.takeIf { it.isNotBlank() }
     }
 
-    fun getFileAtRef(ref: String, filePath: String): String? {
-        return runGitCommandWithOutput("show", "$ref:$filePath")
-    }
-
     private fun runGitCommand(vararg args: String): Int {
         return try {
             val process = ProcessBuilder("git", *args)
@@ -126,21 +120,6 @@ class GitService(val projectRoot: Path) {
             .split("\n")
             .filter { it.isNotBlank() }
             .sorted()
-    }
-
-    fun getChangedFiles(fromRef: String, toRef: String): List<ChangedFile> {
-        val output = runGitCommandWithOutput("diff", "--name-status", "$fromRef..$toRef") ?: return emptyList()
-        return output.trim()
-            .split("\n")
-            .filter { it.isNotBlank() }
-            .map { line ->
-                val parts = line.split("\t")
-                ChangedFile(
-                    path = parts.getOrElse(1) { "" },
-                    changeType = ChangeType.fromGitStatus(parts.getOrElse(0) { "M" })
-                )
-            }
-            .filter { it.path.isNotBlank() }
     }
 
     fun getChangedFilePaths(fromRef: String, toRef: String): Set<String> {

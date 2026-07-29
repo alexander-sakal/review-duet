@@ -99,6 +99,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
                 selectedRepoPath = availableRepos.first()
             }
             review = Review.forCurrentBranch(selectedRepoPath)
+            changesPanel.shutdown()
             changesPanel = ChangesPanel(project, review)
         }
     }
@@ -106,6 +107,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
     private fun onRepoSelected(repoPath: Path) {
         selectedRepoPath = repoPath
         review = Review.forCurrentBranch(repoPath)
+        changesPanel.shutdown()
         changesPanel = ChangesPanel(project, review)
         refresh()
     }
@@ -375,8 +377,8 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         val tabbedPane = JBTabbedPane().apply {
             putClientProperty("JBTabbedPane.tabAreaInsets", JBUI.insets(0))
             border = JBUI.Borders.emptyTop(4)
-            addTab("Comments", commentsContent)
             addTab("Changes", changesPanel)
+            addTab("Comments", commentsContent)
             selectedIndex = selectedTabIndex.coerceIn(0, tabCount - 1)
         }
 

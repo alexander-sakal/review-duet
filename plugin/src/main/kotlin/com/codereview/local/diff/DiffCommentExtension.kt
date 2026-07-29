@@ -63,10 +63,11 @@ class DiffCommentExtension : DiffExtension() {
         val project = context.project ?: return
 
         val editor = viewer.editor2
-        val title = request.title ?: return
 
-        // Extract file path from title
-        val filePath = extractFilePath(title)
+        // Requests from the review browser carry the path; other producers only have a title to read
+        val filePath = request.getUserData(com.codereview.local.ui.ChangesPanel.FILE_PATH_KEY)
+            ?: request.title?.let { extractFilePath(it) }
+            ?: return
 
         // Get review from request (passed from ChangesPanel)
         val review = request.getUserData(com.codereview.local.ui.ChangesPanel.REVIEW_KEY) ?: return
