@@ -11,8 +11,10 @@ import com.intellij.diff.DiffContext
 import com.intellij.diff.DiffExtension
 import com.intellij.diff.FrameDiffTool
 import com.intellij.diff.requests.DiffRequest
+import com.intellij.diff.tools.util.side.OnesideTextDiffViewer
 import com.intellij.diff.tools.util.side.TwosideTextDiffViewer
 import com.intellij.diff.tools.util.base.DiffViewerBase
+import com.intellij.diff.util.Side
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.actionSystem.ActionManager
@@ -58,11 +60,16 @@ import javax.swing.*
 class DiffCommentExtension : DiffExtension() {
 
     override fun onViewerCreated(viewer: FrameDiffTool.DiffViewer, context: DiffContext, request: DiffRequest) {
-        if (viewer !is TwosideTextDiffViewer) return
-
         val project = context.project ?: return
 
-        val editor = viewer.editor2
+        // An added file has no before-revision, so the platform gives it a one-side viewer holding
+        // the new content. A deleted file gets one too, but on the left, and its path is gone — no
+        // point anchoring comments there.
+        val editor = when (viewer) {
+            is TwosideTextDiffViewer -> viewer.editor2
+            is OnesideTextDiffViewer -> viewer.editor.takeIf { viewer.side == Side.RIGHT }
+            else -> null
+        } ?: return
 
         // Requests from the review browser carry the path; other producers only have a title to read
         val filePath = request.getUserData(com.codereview.local.ui.ChangesPanel.FILE_PATH_KEY)
@@ -94,7 +101,7 @@ class DiffCommentExtension : DiffExtension() {
         }
     }
 
-    private fun addReviewToolbar(viewer: TwosideTextDiffViewer, project: Project, filePath: String, review: Review, commentId: Int) {
+    private fun addReviewToolbar(viewer: FrameDiffTool.DiffViewer, project: Project, filePath: String, review: Review, commentId: Int) {
         val viewerComponent = viewer.component
         val parent = viewerComponent.parent as? JComponent ?: return
 
