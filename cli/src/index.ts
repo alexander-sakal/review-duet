@@ -42,10 +42,11 @@ function getReviewPath(options: Record<string, string>, cwd: string): string {
   if (options.review) {
     return options.review;
   }
-  // Default: .review-duet/{branch}.json
+  // Default: .review-duet/{branch}.json, with "/" encoded the same way as the plugin
   const { execSync } = require('child_process');
   const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
-  return `${cwd}/.review-duet/${branch}.json`;
+  const encoded = branch.replace(/%/g, '%25').replace(/\//g, '%2F');
+  return `${cwd}/.review-duet/${encoded}.json`;
 }
 
 

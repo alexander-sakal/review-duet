@@ -537,7 +537,7 @@ class ReviewPanel(private val project: Project) : JBPanel<ReviewPanel>(BorderLay
         if (result != com.intellij.openapi.ui.Messages.YES) return
 
         // Delete review file for current branch
-        val reviewFile = selectedRepoPath.resolve(".review-duet").resolve("$branch.json").toFile()
+        val reviewFile = Review.forCurrentBranch(selectedRepoPath).filePath.toFile()
         if (reviewFile.exists()) {
             reviewFile.delete()
         }

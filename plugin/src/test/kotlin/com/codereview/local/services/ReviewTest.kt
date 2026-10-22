@@ -65,6 +65,21 @@ class ReviewTest {
     }
 
     @Test
+    fun `should store review for slashed branch as a flat encoded file`() {
+        tempDir.resolve(".review-duet").createDirectories()
+        ProcessBuilder("git", "checkout", "-b", "feature/x")
+            .directory(tempDir.toFile())
+            .start()
+            .waitFor()
+
+        val slashed = Review.forCurrentBranch(tempDir)
+        slashed.initialize("abc1234")
+
+        assertEquals(tempDir.resolve(".review-duet/feature%2Fx.json"), slashed.filePath)
+        assertTrue(slashed.hasActiveReview())
+    }
+
+    @Test
     fun `should load review data`() {
         val reviewDir = tempDir.resolve(".review-duet")
         reviewDir.createDirectories()

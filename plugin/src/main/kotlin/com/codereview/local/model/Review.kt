@@ -1,5 +1,6 @@
 package com.codereview.local.model
 
+import com.codereview.local.services.FileReviewService
 import com.codereview.local.services.GitService
 import java.nio.file.Path
 import java.time.Instant
@@ -210,7 +211,7 @@ class Review(
         fun forCurrentBranch(repoRoot: Path): Review {
             val gitService = GitService(repoRoot)
             val branch = gitService.getCurrentBranch() ?: "main"
-            val filePath = repoRoot.resolve(".review-duet").resolve("$branch.json")
+            val filePath = repoRoot.resolve(".review-duet").resolve("${FileReviewService.encodeRelativePath(branch)}.json")
             return Review(repoRoot, filePath)
         }
     }
