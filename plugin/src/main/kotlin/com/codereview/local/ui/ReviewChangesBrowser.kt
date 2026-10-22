@@ -15,6 +15,7 @@ import com.intellij.openapi.vcs.changes.ui.TreeModelBuilder
 import com.intellij.vcsUtil.VcsFileUtil
 import git4idea.changes.GitChangeUtils
 import java.awt.Window
+import java.awt.event.WindowEvent
 import java.lang.ref.WeakReference
 import javax.swing.SwingUtilities
 
@@ -58,6 +59,10 @@ class ReviewChangesBrowser(
     }
 
     override fun showDiff() {
+        // One diff window per Changes tab: close the previous one instead of stacking another.
+        // WINDOW_CLOSING (not dispose) lets the platform frame run its own cleanup.
+        lastDiffWindow?.get()?.takeIf { it.isDisplayable }
+            ?.let { it.dispatchEvent(WindowEvent(it, WindowEvent.WINDOW_CLOSING)) }
         val windowsBefore = Window.getWindows().toSet()
         super.showDiff()
         SwingUtilities.invokeLater {
